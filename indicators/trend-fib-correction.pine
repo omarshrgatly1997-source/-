@@ -70,31 +70,29 @@ priceLvl667 = validLeg ? f_priceAtLevel(pointA, pointB, lvl667) : na
 priceLvl0   = validLeg ? f_priceAtLevel(pointA, pointB, lvl0)   : na
 priceLvlExt = validLeg ? f_priceAtLevel(pointA, pointB, lvlExt) : na
 
-// تصحيح = السعر رجع أعمق من مستوى 0.667 باتجاه معاكس للترند
+// تصحيح = السعر رجع أعمق من مستوى 0.667 باتجاه معاكس للترند -> هذه نقطة الدخول
 corrected        = validLeg and (trendUp ? close < priceLvl667 : close > priceLvl667)
 correctionStarted = corrected and not corrected[1]
 
+// وقف الخسارة عند اختراق مستوى 0.786 (أعمق من الدخول)
+slHit     = validLeg and (trendUp ? close < priceLvl786 : close > priceLvl786)
+slHitNow  = slHit and not slHit[1]
+
 // ---------------- رسم/تحديث فيبوناتشي عند عدم وجود تصحيح ----------------
 var line  l1     = na
-var line  l786   = na
-var line  l667   = na
 var line  l0     = na
 var line  lExt   = na
 var label lState = na
 
 if validLeg and not corrected
     line.delete(l1)
-    line.delete(l786)
-    line.delete(l667)
     line.delete(l0)
     line.delete(lExt)
     label.delete(lState)
 
-    l1   := line.new(pointBBar, priceLvl1,   bar_index, priceLvl1,   color=color.gray,   style=line.style_dashed)
-    l786 := line.new(pointBBar, priceLvl786, bar_index, priceLvl786, color=color.orange)
-    l667 := line.new(pointBBar, priceLvl667, bar_index, priceLvl667, color=color.red)
-    l0   := line.new(pointBBar, priceLvl0,   bar_index, priceLvl0,   color=color.gray,   style=line.style_dashed)
-    lExt := line.new(pointBBar, priceLvlExt, bar_index, priceLvlExt, color=color.blue,   style=line.style_dotted)
+    l1   := line.new(pointBBar, priceLvl1,   bar_index, priceLvl1,   color=color.gray, style=line.style_dashed)
+    l0   := line.new(pointBBar, priceLvl0,   bar_index, priceLvl0,   color=color.gray, style=line.style_dashed)
+    lExt := line.new(pointBBar, priceLvlExt, bar_index, priceLvlExt, color=color.blue, style=line.style_dotted)
 
     lState := label.new(bar_index, priceLvlExt, "لا يوجد تصحيح - فيبو نشط", style=label.style_label_down, color=color.blue, textcolor=color.white, size=size.small)
 
@@ -102,7 +100,28 @@ if corrected
     label.delete(lState)
     lState := label.new(bar_index, trendUp ? low : high, "تنبيه: تصحيح على السعر", style=trendUp ? label.style_label_up : label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
 
-alertcondition(correctionStarted, title="تنبيه تصحيح السعر", message="تم رصد تصحيح على السعر بعد آخر ساق في اتجاه الترند")
+// ---------------- نقطة الدخول (0.667) ووقف الخسارة (0.786) ----------------
+var line  lEntry    = na
+var line  lSL       = na
+var label lEntryTxt = na
+var label lSLTxt    = na
+
+if validLeg
+    line.delete(lEntry)
+    line.delete(lSL)
+    label.delete(lEntryTxt)
+    label.delete(lSLTxt)
+
+    lEntry    := line.new(pointBBar, priceLvl667, bar_index, priceLvl667, color=color.lime, width=2)
+    lSL       := line.new(pointBBar, priceLvl786, bar_index, priceLvl786, color=color.red,  width=2, style=line.style_dashed)
+    lEntryTxt := label.new(bar_index, priceLvl667, "دخول " + str.tostring(priceLvl667, format.mintick), style=label.style_label_left, color=color.lime, textcolor=color.black, size=size.small)
+    lSLTxt    := label.new(bar_index, priceLvl786, "وقف خسارة " + str.tostring(priceLvl786, format.mintick), style=label.style_label_left, color=color.red, textcolor=color.white, size=size.small)
+
+if correctionStarted
+    label.new(bar_index, priceLvl667, trendUp ? "شراء - دخول" : "بيع - دخول", style=trendUp ? label.style_label_up : label.style_label_down, color=color.lime, textcolor=color.black, size=size.small)
+
+alertcondition(correctionStarted, title="تنبيه دخول عند 0.667", message="نقطة دخول: وصل السعر لمستوى 0.667")
+alertcondition(slHitNow, title="تنبيه وقف الخسارة عند 0.786", message="تم اختراق وقف الخسارة عند مستوى 0.786")
 
 // ---------------- عرض الاتجاه ----------------
 bgcolor(trendUp ? color.new(color.green, 92) : trendDown ? color.new(color.red, 92) : na)
