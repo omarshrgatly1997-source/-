@@ -1,22 +1,22 @@
 //@version=5
 indicator("Trend (1H) + Swing Fib Correction Alert (5M)", shorttitle="Trend+Fib", overlay=true, max_lines_count=50, max_labels_count=50)
 
-// ---------------- الاتجاه العام (فريم ساعة) ----------------
-grpTrend   = "الاتجاه - فريم 1 ساعة"
-trendTF    = input.timeframe("60", "فريم تحديد الاتجاه", group=grpTrend)
-fastLen    = input.int(50, "EMA سريع", group=grpTrend)
-slowLen    = input.int(200, "EMA بطيء", group=grpTrend)
+// ---------------- Trend (1 hour timeframe) ----------------
+grpTrend   = "Trend - 1H"
+trendTF    = input.timeframe("60", "Trend timeframe", group=grpTrend)
+fastLen    = input.int(50, "Fast EMA", group=grpTrend)
+slowLen    = input.int(200, "Slow EMA", group=grpTrend)
 
 [emaFast1h, emaSlow1h] = request.security(syminfo.tickerid, trendTF, [ta.ema(close, fastLen), ta.ema(close, slowLen)], lookahead=barmerge.lookahead_off)
 
 trendUp   = emaFast1h > emaSlow1h
 trendDown = emaFast1h < emaSlow1h
 
-// ---------------- القمة والقاع (فريم 5 دقائق) ----------------
-// شغّل المؤشر على شارت 5 دقائق حتى يقرأ high/low الصحيحة لهذا الفريم
-grpSwing    = "القمة والقاع - فريم 5 دقائق"
-pivotLeft   = input.int(5, "شموع يسار البيفوت", group=grpSwing)
-pivotRight  = input.int(5, "شموع يمين البيفوت (تأكيد)", group=grpSwing)
+// ---------------- Swing high/low (5 minute timeframe) ----------------
+// Run this indicator on a 5-minute chart so it reads the correct high/low for that timeframe
+grpSwing    = "Swing High/Low - 5M"
+pivotLeft   = input.int(5, "Pivot left bars", group=grpSwing)
+pivotRight  = input.int(5, "Pivot right bars (confirmation)", group=grpSwing)
 
 ph = ta.pivothigh(high, pivotLeft, pivotRight)
 pl = ta.pivotlow(low, pivotLeft, pivotRight)
@@ -34,16 +34,16 @@ if not na(pl)
     lastPivotLow    := pl
     lastPivotLowBar := bar_index - pivotRight
 
-// ---------------- فيبوناتشي ----------------
-grpFib   = "مستويات فيبوناتشي"
-lvl1     = input.float(1.0,   "مستوى 1",      group=grpFib)
-lvl786   = input.float(0.786, "مستوى 0.786",  group=grpFib)
-lvl667   = input.float(0.667, "مستوى 0.667 (حد التصحيح)", group=grpFib)
-lvl0     = input.float(0.0,   "مستوى 0",      group=grpFib)
-lvlExt   = input.float(-1.3,  "مستوى الامتداد -1.3", group=grpFib)
+// ---------------- Fibonacci ----------------
+grpFib   = "Fibonacci Levels"
+lvl1     = input.float(1.0,   "Level 1",              group=grpFib)
+lvl786   = input.float(0.786, "Level 0.786 (stop loss)", group=grpFib)
+lvl667   = input.float(0.667, "Level 0.667 (entry)",  group=grpFib)
+lvl0     = input.float(0.0,   "Level 0",              group=grpFib)
+lvlExt   = input.float(-1.3,  "Extension level -1.3", group=grpFib)
 
-// نقطة A = آخر قمة/قاع في اتجاه الترند (تمثل level 0)
-// نقطة B = القمة/القاع الأقدم قبلها (تمثل level 1)
+// Point A = most recent swing high/low in the trend direction (represents level 0)
+// Point B = the older swing high/low before it (represents level 1)
 haveLeg = not na(lastPivotHigh) and not na(lastPivotLow)
 
 float pointA    = na
@@ -70,15 +70,15 @@ priceLvl667 = validLeg ? f_priceAtLevel(pointA, pointB, lvl667) : na
 priceLvl0   = validLeg ? f_priceAtLevel(pointA, pointB, lvl0)   : na
 priceLvlExt = validLeg ? f_priceAtLevel(pointA, pointB, lvlExt) : na
 
-// تصحيح = السعر رجع أعمق من مستوى 0.667 باتجاه معاكس للترند -> هذه نقطة الدخول
+// Correction = price pulled back past the 0.667 level against the trend -> this is the entry point
 corrected        = validLeg and (trendUp ? close < priceLvl667 : close > priceLvl667)
 correctionStarted = corrected and not corrected[1]
 
-// وقف الخسارة عند اختراق مستوى 0.786 (أعمق من الدخول)
+// Stop loss = price breaks past the 0.786 level (deeper than the entry)
 slHit     = validLeg and (trendUp ? close < priceLvl786 : close > priceLvl786)
 slHitNow  = slHit and not slHit[1]
 
-// ---------------- رسم/تحديث فيبوناتشي عند عدم وجود تصحيح ----------------
+// ---------------- Draw/update Fibonacci while no correction has happened ----------------
 var line  l1     = na
 var line  l0     = na
 var line  lExt   = na
@@ -94,13 +94,13 @@ if validLeg and not corrected
     l0   := line.new(pointBBar, priceLvl0,   bar_index, priceLvl0,   color=color.gray, style=line.style_dashed)
     lExt := line.new(pointBBar, priceLvlExt, bar_index, priceLvlExt, color=color.blue, style=line.style_dotted)
 
-    lState := label.new(bar_index, priceLvlExt, "لا يوجد تصحيح - فيبو نشط", style=label.style_label_down, color=color.blue, textcolor=color.white, size=size.small)
+    lState := label.new(bar_index, priceLvlExt, "No correction - Fib active", style=label.style_label_down, color=color.blue, textcolor=color.white, size=size.small)
 
 if corrected
     label.delete(lState)
-    lState := label.new(bar_index, trendUp ? low : high, "تنبيه: تصحيح على السعر", style=trendUp ? label.style_label_up : label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
+    lState := label.new(bar_index, trendUp ? low : high, "Alert: price correction", style=trendUp ? label.style_label_up : label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
 
-// ---------------- نقطة الدخول (0.667) ووقف الخسارة (0.786) ----------------
+// ---------------- Entry (0.667) and stop loss (0.786) ----------------
 var line  lEntry    = na
 var line  lSL       = na
 var label lEntryTxt = na
@@ -114,21 +114,21 @@ if validLeg
 
     lEntry    := line.new(pointBBar, priceLvl667, bar_index, priceLvl667, color=color.lime, width=2)
     lSL       := line.new(pointBBar, priceLvl786, bar_index, priceLvl786, color=color.red,  width=2, style=line.style_dashed)
-    lEntryTxt := label.new(bar_index, priceLvl667, "دخول " + str.tostring(priceLvl667, format.mintick), style=label.style_label_left, color=color.lime, textcolor=color.black, size=size.small)
-    lSLTxt    := label.new(bar_index, priceLvl786, "وقف خسارة " + str.tostring(priceLvl786, format.mintick), style=label.style_label_left, color=color.red, textcolor=color.white, size=size.small)
+    lEntryTxt := label.new(bar_index, priceLvl667, "Entry " + str.tostring(priceLvl667, format.mintick), style=label.style_label_left, color=color.lime, textcolor=color.black, size=size.small)
+    lSLTxt    := label.new(bar_index, priceLvl786, "Stop loss " + str.tostring(priceLvl786, format.mintick), style=label.style_label_left, color=color.red, textcolor=color.white, size=size.small)
 
 if correctionStarted
-    label.new(bar_index, priceLvl667, trendUp ? "شراء - دخول" : "بيع - دخول", style=trendUp ? label.style_label_up : label.style_label_down, color=color.lime, textcolor=color.black, size=size.small)
+    label.new(bar_index, priceLvl667, trendUp ? "Buy - Entry" : "Sell - Entry", style=trendUp ? label.style_label_up : label.style_label_down, color=color.lime, textcolor=color.black, size=size.small)
 
-alertcondition(correctionStarted, title="تنبيه دخول عند 0.667", message="نقطة دخول: وصل السعر لمستوى 0.667")
-alertcondition(slHitNow, title="تنبيه وقف الخسارة عند 0.786", message="تم اختراق وقف الخسارة عند مستوى 0.786")
+alertcondition(correctionStarted, title="Entry alert at 0.667", message="Entry point: price reached the 0.667 level")
+alertcondition(slHitNow, title="Stop loss alert at 0.786", message="Stop loss breached at the 0.786 level")
 
-// ---------------- عرض الاتجاه ----------------
+// ---------------- Trend display ----------------
 bgcolor(trendUp ? color.new(color.green, 92) : trendDown ? color.new(color.red, 92) : na)
-plotshape(trendUp and not trendUp[1],     title="بداية ترند صاعد", style=shape.triangleup,   location=location.belowbar, color=color.green, size=size.tiny)
-plotshape(trendDown and not trendDown[1], title="بداية ترند هابط", style=shape.triangledown, location=location.abovebar, color=color.red,   size=size.tiny)
+plotshape(trendUp and not trendUp[1],     title="Uptrend start",   style=shape.triangleup,   location=location.belowbar, color=color.green, size=size.tiny)
+plotshape(trendDown and not trendDown[1], title="Downtrend start", style=shape.triangledown, location=location.abovebar, color=color.red,   size=size.tiny)
 
 var label trendLabel = na
 if barstate.islast
     label.delete(trendLabel)
-    trendLabel := label.new(bar_index, high, trendUp ? "الاتجاه: صاعد (1H)" : trendDown ? "الاتجاه: هابط (1H)" : "الاتجاه: محايد (1H)", style=label.style_label_left, color=trendUp ? color.green : trendDown ? color.red : color.gray, textcolor=color.white, size=size.small)
+    trendLabel := label.new(bar_index, high, trendUp ? "Trend: Up (1H)" : trendDown ? "Trend: Down (1H)" : "Trend: Neutral (1H)", style=label.style_label_left, color=trendUp ? color.green : trendDown ? color.red : color.gray, textcolor=color.white, size=size.small)
