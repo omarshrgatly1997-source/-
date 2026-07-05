@@ -25,14 +25,31 @@ var float lastPivotHigh    = na
 var int   lastPivotHighBar = na
 var float lastPivotLow     = na
 var int   lastPivotLowBar  = na
+var bool  brokenHigh       = false
+var bool  brokenLow        = false
 
 if not na(ph)
     lastPivotHigh    := ph
     lastPivotHighBar := bar_index - pivotRight
+    brokenHigh       := false
 
 if not na(pl)
     lastPivotLow    := pl
     lastPivotLowBar := bar_index - pivotRight
+    brokenLow       := false
+
+// ---------------- BOS / CHoCH on structure break ----------------
+// Break confirmed by candle close -> BOS. Break by wick only (close stays back inside) -> CHoCH.
+breakUp   = not brokenHigh and not na(lastPivotHigh) and high > lastPivotHigh
+breakDown = not brokenLow  and not na(lastPivotLow)  and low  < lastPivotLow
+
+if breakUp
+    brokenHigh := true
+    label.new(bar_index, high, close > lastPivotHigh ? "BOS" : "CHoCH", style=label.style_label_down, color=close > lastPivotHigh ? color.green : color.orange, textcolor=color.white, size=size.small)
+
+if breakDown
+    brokenLow := true
+    label.new(bar_index, low, close < lastPivotLow ? "BOS" : "CHoCH", style=label.style_label_up, color=close < lastPivotLow ? color.red : color.orange, textcolor=color.white, size=size.small)
 
 // ---------------- Fibonacci ----------------
 grpFib   = "Fibonacci Levels"
