@@ -1,0 +1,108 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TradeDirection {
+  LONG
+  SHORT
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         Role       @default(USER)
+  status       UserStatus @default(PENDING)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  approvedAt   DateTime?
+  approvedById String?
+
+  strategies   Strategy[]    @relation("StrategyAuthor")
+  chatMessages ChatMessage[]
+  trades       Trade[]
+
+  @@index([status])
+  @@index([email])
+}
+
+model Strategy {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  summary     String
+  content     String
+  riskLevel   RiskLevel @default(MEDIUM)
+  published   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  author      User      @relation("StrategyAuthor", fields: [authorId], references: [id])
+  authorId    String
+
+  trades      Trade[]
+
+  @@index([published])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String // "user" | "assistant"
+  content   String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+
+  @@index([userId, createdAt])
+}
+
+// Trade tracking is prepared for a future release: the schema exists so the
+// admin's per-user page can display a trade history once entry is wired up.
+model Trade {
+  id         String          @id @default(cuid())
+  symbol     String
+  direction  TradeDirection
+  entryPrice Float
+  exitPrice  Float?
+  quantity   Float
+  pnl        Float?
+  notes      String?
+  openedAt   DateTime        @default(now())
+  closedAt   DateTime?
+  createdAt  DateTime        @default(now())
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+
+  strategy   Strategy?       @relation(fields: [strategyId], references: [id])
+  strategyId String?
+
+  @@index([userId])
+}
