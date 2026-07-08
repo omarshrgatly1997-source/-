@@ -24,9 +24,12 @@ trendDown = emaFast1h < emaSlow1h
 grpSwing    = "Swing High/Low - 5M"
 pivotLeft   = input.int(5, "Pivot left bars", group=grpSwing)
 pivotRight  = input.int(5, "Pivot right bars (confirmation)", group=grpSwing)
+minSwingPct = input.float(0.3, "Minimum swing size %  (filters minor highs/lows)", minval=0.0, step=0.1, group=grpSwing)
 
 ph = ta.pivothigh(high, pivotLeft, pivotRight)
 pl = ta.pivotlow(low, pivotLeft, pivotRight)
+
+f_swingPct(a, b) => (na(a) or na(b) or b == 0) ? na : math.abs(a - b) / b * 100
 
 var float lastPivotHigh    = na
 var int   lastPivotHighBar = na
@@ -34,16 +37,34 @@ var float lastPivotLow     = na
 var int   lastPivotLowBar  = na
 var bool  brokenHigh       = false
 var bool  brokenLow        = false
+var int   zigDir           = 0  // 0 = none yet, 1 = last major point was a high, -1 = last major point was a low
 
+// Only keep a pivot as the major high/low if it either extends the current
+// swing further, or reverses far enough (minSwingPct) from the opposite major
+// point. This filters out minor highs/lows and keeps only the main ones.
 if not na(ph)
-    lastPivotHigh    := ph
-    lastPivotHighBar := bar_index - pivotRight
-    brokenHigh       := false
+    if zigDir == 1
+        if ph > lastPivotHigh
+            lastPivotHigh    := ph
+            lastPivotHighBar := bar_index - pivotRight
+            brokenHigh       := false
+    else if na(lastPivotLow) or f_swingPct(ph, lastPivotLow) >= minSwingPct
+        lastPivotHigh    := ph
+        lastPivotHighBar := bar_index - pivotRight
+        brokenHigh       := false
+        zigDir            := 1
 
 if not na(pl)
-    lastPivotLow    := pl
-    lastPivotLowBar := bar_index - pivotRight
-    brokenLow       := false
+    if zigDir == -1
+        if pl < lastPivotLow
+            lastPivotLow    := pl
+            lastPivotLowBar := bar_index - pivotRight
+            brokenLow       := false
+    else if na(lastPivotHigh) or f_swingPct(lastPivotHigh, pl) >= minSwingPct
+        lastPivotLow    := pl
+        lastPivotLowBar := bar_index - pivotRight
+        brokenLow       := false
+        zigDir           := -1
 
 // ---------------- BOS / CHoCH on structure break (pivot based) ----------------
 // Break confirmed by candle close -> BOS. Break by wick only (close stays back inside) -> CHoCH.
