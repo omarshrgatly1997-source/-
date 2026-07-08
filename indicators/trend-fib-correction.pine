@@ -1,12 +1,5 @@
-// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © RobinTShark
-
 //@version=6
-indicator("omar_shrgatly - Trend+Fib+FVG", shorttitle="omar_shrgatly", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
-
-// ==========================================
-// PART 1: TREND (1H) + SWING FIB CORRECTION (5M)
-// ==========================================
+indicator("omar_shrgatly - Trend+Fib", shorttitle="omar_shrgatly", overlay=true, max_lines_count=100, max_labels_count=100)
 
 // ---------------- Trend (1 hour timeframe) ----------------
 grpTrend   = "Trend - 1H"
@@ -35,8 +28,6 @@ var float lastPivotHigh    = na
 var int   lastPivotHighBar = na
 var float lastPivotLow     = na
 var int   lastPivotLowBar  = na
-var bool  brokenHigh       = false
-var bool  brokenLow        = false
 var int   zigDir           = 0  // 0 = none yet, 1 = last major point was a high, -1 = last major point was a low
 
 // Only keep a pivot as the major high/low if it either extends the current
@@ -47,11 +38,9 @@ if not na(ph)
         if ph > lastPivotHigh
             lastPivotHigh    := ph
             lastPivotHighBar := bar_index - pivotRight
-            brokenHigh       := false
     else if na(lastPivotLow) or f_swingPct(ph, lastPivotLow) >= minSwingPct
         lastPivotHigh    := ph
         lastPivotHighBar := bar_index - pivotRight
-        brokenHigh       := false
         zigDir            := 1
 
 if not na(pl)
@@ -59,25 +48,10 @@ if not na(pl)
         if pl < lastPivotLow
             lastPivotLow    := pl
             lastPivotLowBar := bar_index - pivotRight
-            brokenLow       := false
     else if na(lastPivotHigh) or f_swingPct(lastPivotHigh, pl) >= minSwingPct
         lastPivotLow    := pl
         lastPivotLowBar := bar_index - pivotRight
-        brokenLow       := false
         zigDir           := -1
-
-// ---------------- BOS / CHoCH on structure break (pivot based) ----------------
-// Break confirmed by candle close -> BOS. Break by wick only (close stays back inside) -> CHoCH.
-breakUp   = not brokenHigh and not na(lastPivotHigh) and high > lastPivotHigh
-breakDown = not brokenLow  and not na(lastPivotLow)  and low  < lastPivotLow
-
-if breakUp
-    brokenHigh := true
-    label.new(bar_index, high, close > lastPivotHigh ? "BOS" : "CHoCH", style=label.style_label_down, color=close > lastPivotHigh ? color.green : color.orange, textcolor=color.white, size=size.small)
-
-if breakDown
-    brokenLow := true
-    label.new(bar_index, low, close < lastPivotLow ? "BOS" : "CHoCH", style=label.style_label_up, color=close < lastPivotLow ? color.red : color.orange, textcolor=color.white, size=size.small)
 
 // ---------------- Fibonacci ----------------
 grpFib   = "Fibonacci Levels"
@@ -250,249 +224,3 @@ var label trendLabel = na
 if barstate.islast
     label.delete(trendLabel)
     trendLabel := label.new(bar_index, high, trendUp ? "Trend: Up (1H)" : trendDown ? "Trend: Down (1H)" : "Trend: Neutral (1H)", style=label.style_label_left, color=trendUp ? color.green : trendDown ? color.red : color.gray, textcolor=color.white, size=size.small)
-
-// ==========================================
-// PART 2: FVG + MARKET STRUCTURE (BOS / SWEEP)
-// ==========================================
-
-// ==========================================
-// 🔹 1. FVG SETTINGS
-// ==========================================
-showBullFVG = input.bool(true, title="Bullish Imbalance", group="Imbalances", inline="fvgbull")
-aantBullFVG = input.int(10, title="#", group="Imbalances", inline="fvgbull")
-colorBullFVG = input.color(color.new(color.aqua,80),title="BG", group="Imbalances", inline="fvgbull")
-lineBullFVG = input.color(color.new(color.aqua,90),title="Line", group="Imbalances", inline="fvgbull")
-
-showBearFVG = input.bool(true, title="Bearish Imbalance", group="Imbalances", inline="fvgbear")
-aantbearFVG = input.int(10, title="#", group="Imbalances", inline="fvgbear")
-colorbearFVG = input.color(color.new(color.orange,80),title="BG", group="Imbalances", inline="fvgbear")
-linebearFVG = input.color(color.new(color.orange,90),title="Line", group="Imbalances", inline="fvgbear")
-
-// ==========================================
-// 🔹 2. STRUCTURE & BOS/SWEEP SETTINGS
-// ==========================================
-grp_struct = "Market Structure"
-showStructure = input.bool(true, "Show Connection Lines", group=grp_struct)
-colStructBull = input.color(color.green, "Expansion Up (HH)", group=grp_struct)
-colStructBear = input.color(color.red, "Expansion Down (LL)", group=grp_struct)
-colStructInt  = input.color(color.gray, "Internal (LH/HL)", group=grp_struct)
-widthStruct   = input.int(2, "Connection Width", group=grp_struct)
-
-grp_break = "Breaks & Sweeps"
-showBreaks    = input.bool(true, "Show BOS/Sweep Lines", group=grp_break)
-colBOS        = input.color(color.green, "BOS (Break) Color", group=grp_break)
-colSweep      = input.color(color.gray, "Sweep (Fakeout) Color", group=grp_break)
-lblSize       = input.string(size.tiny, "Label Size", options=[size.tiny, size.small, size.normal], group=grp_break)
-
-// ==========================================
-// 🔹 3. TYPES & ARRAYS
-// ==========================================
-type FVG
-    box id
-    bool isMitigated
-    float top
-    float bottom
-    int createdIndex
-
-var array<FVG> bullList = array.new<FVG>()
-var array<FVG> bearList = array.new<FVG>()
-
-// ==========================================
-// 🔹 4. LOGICA VARIABELEN
-// ==========================================
-bullFVG = low > high[2]
-bearFVG = low[2] > high
-
-// State tracking voor structuur
-var int mode = 0
-var float tempPeakPrice = na
-var int tempPeakTime = 0
-var float lastConfirmedPrice = na
-var int lastConfirmedTime = 0
-
-// State tracking voor BOS/Sweeps (en voor kleuring van de legs)
-var float activeOldHighPrice = na
-var bool activeOldHighBroken = true
-
-var float activeOldLowPrice = na
-var bool activeOldLowBroken = true
-
-// Variabelen om de 'Fakeout' te detecteren (volgende candle check)
-var line lastHighLine = na
-var label lastHighLabel = na
-var bool monitorHighBreak = false
-var float breakHighCandleLow = na
-
-var line lastLowLine = na
-var label lastLowLabel = na
-var bool monitorLowBreak = false
-var float breakLowCandleHigh = na
-
-// ==========================================
-// 🔹 5. MAIN LOGIC LOOP
-// ==========================================
-
-// --- A. STRUCTURE UPDATE LOGIC ---
-if mode == 1 // Zoeken naar High
-    if high > tempPeakPrice
-        tempPeakPrice := high
-        tempPeakTime := time
-
-    if bearFVG
-        // Bevestig de High (We komen van Low -> High)
-        if showStructure
-            // Bepaal kleur: Is deze High hoger dan de vorige Active Old High?
-            color legColor = colStructInt
-            if not na(activeOldHighPrice)
-                if tempPeakPrice > activeOldHighPrice
-                    legColor := colStructBull // HH = Expansion Up
-                else
-                    legColor := colStructInt // LH = Internal
-            else
-                legColor := colStructInt // Eerste lijn
-
-            line.new(lastConfirmedTime, lastConfirmedPrice, tempPeakTime, tempPeakPrice, xloc=xloc.bar_time, color=legColor, width=widthStruct)
-
-        // Update Active Old High
-        activeOldHighPrice := tempPeakPrice
-        activeOldHighBroken := false // Reset break status
-
-        // Update pointers
-        lastConfirmedPrice := tempPeakPrice
-        lastConfirmedTime := tempPeakTime
-        mode := -1
-        tempPeakPrice := low
-        tempPeakTime := time
-
-else if mode == -1 // Zoeken naar Low
-    if low < tempPeakPrice
-        tempPeakPrice := low
-        tempPeakTime := time
-
-    if bullFVG
-        // Bevestig de Low (We komen van High -> Low)
-        if showStructure
-            // Bepaal kleur: Is deze Low lager dan de vorige Active Old Low?
-            color legColor = colStructInt
-            if not na(activeOldLowPrice)
-                if tempPeakPrice < activeOldLowPrice
-                    legColor := colStructBear // LL = Expansion Down
-                else
-                    legColor := colStructInt // HL = Internal
-            else
-                legColor := colStructInt
-
-            line.new(lastConfirmedTime, lastConfirmedPrice, tempPeakTime, tempPeakPrice, xloc=xloc.bar_time, color=legColor, width=widthStruct)
-
-        // Update Active Old Low
-        activeOldLowPrice := tempPeakPrice
-        activeOldLowBroken := false // Reset break status
-
-        // Update pointers
-        lastConfirmedPrice := tempPeakPrice
-        lastConfirmedTime := tempPeakTime
-        mode := 1
-        tempPeakPrice := high
-        tempPeakTime := time
-
-else if mode == 0 // Start up
-    if bullFVG
-        mode := 1
-        tempPeakPrice := high
-        tempPeakTime := time
-        lastConfirmedPrice := low[2]
-        lastConfirmedTime := time[2]
-        activeOldLowPrice := low[2]
-    else if bearFVG
-        mode := -1
-        tempPeakPrice := low
-        tempPeakTime := time
-        lastConfirmedPrice := high[2]
-        lastConfirmedTime := time[2]
-        activeOldHighPrice := high[2]
-
-// --- B. BREAK & SWEEP DETECTION LOGIC ---
-
-if showBreaks
-    // 1. Check BULLISH Break/Sweep
-    if not activeOldHighBroken and not na(activeOldHighPrice)
-        if high > activeOldHighPrice
-            if close <= activeOldHighPrice // Wick Sweep
-                lastHighLine := line.new(tempPeakTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=colSweep, style=line.style_dashed)
-                lastHighLabel := label.new(time, activeOldHighPrice, "Sweep", xloc=xloc.bar_time, color=color(na), style=label.style_label_down, textcolor=colSweep, size=lblSize)
-                activeOldHighBroken := true
-                monitorHighBreak := false
-            else // Potential Break
-                lastHighLine := line.new(tempPeakTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=colBOS, style=line.style_solid)
-                lastHighLabel := label.new(time, activeOldHighPrice, "BOS", xloc=xloc.bar_time, color=color(na), style=label.style_label_down, textcolor=colBOS, size=lblSize)
-                activeOldHighBroken := true
-                monitorHighBreak := true
-                breakHighCandleLow := low
-
-    // 1b. Monitor Bullish Fakeout
-    else if monitorHighBreak
-        if close < breakHighCandleLow
-            line.set_style(lastHighLine, line.style_dashed)
-            line.set_color(lastHighLine, colSweep)
-            label.set_text(lastHighLabel, "Sweep")
-            label.set_textcolor(lastHighLabel, colSweep)
-        monitorHighBreak := false
-
-    // 2. Check BEARISH Break/Sweep
-    if not activeOldLowBroken and not na(activeOldLowPrice)
-        if low < activeOldLowPrice
-            if close >= activeOldLowPrice // Wick Sweep
-                lastLowLine := line.new(tempPeakTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=colSweep, style=line.style_dashed)
-                lastLowLabel := label.new(time, activeOldLowPrice, "Sweep", xloc=xloc.bar_time, color=color(na), style=label.style_label_up, textcolor=colSweep, size=lblSize)
-                activeOldLowBroken := true
-                monitorLowBreak := false
-            else // Potential Break
-                lastLowLine := line.new(tempPeakTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=colBOS, style=line.style_solid)
-                lastLowLabel := label.new(time, activeOldLowPrice, "BOS", xloc=xloc.bar_time, color=color(na), style=label.style_label_up, textcolor=colBOS, size=lblSize)
-                activeOldLowBroken := true
-                monitorLowBreak := true
-                breakLowCandleHigh := high
-
-    // 2b. Monitor Bearish Fakeout
-    else if monitorLowBreak
-        if close > breakLowCandleHigh
-            line.set_style(lastLowLine, line.style_dashed)
-            line.set_color(lastLowLine, colSweep)
-            label.set_text(lastLowLabel, "Sweep")
-            label.set_textcolor(lastLowLabel, colSweep)
-        monitorLowBreak := false
-
-// ==========================================
-// 🔹 6. FVG BOX UPDATE (Original Logic)
-// ==========================================
-method update_fvg_list(array<FVG> list, bool isBull, int limit, color bgColor, color lnColor) =>
-    if (isBull ? bullFVG : bearFVG)
-        float _top = isBull ? low : low[2]
-        float _btm = isBull ? high[2] : high
-        box newBox = box.new(time[2], _top, time + timeframe.in_seconds(timeframe.period)*1000, _btm, xloc=xloc.bar_time, bgcolor=bgColor, border_color=lnColor)
-        FVG newEntry = FVG.new(newBox, false, _top, _btm, bar_index)
-        array.push(list, newEntry)
-
-    if array.size(list) > 0
-        int duration = timeframe.in_seconds(timeframe.period) * 1000
-        for i = 0 to array.size(list) - 1
-            FVG item = array.get(list, i)
-            if not item.isMitigated
-                if bar_index > item.createdIndex
-                    bool hit = isBull ? (low <= item.top) : (high >= item.bottom)
-                    if hit
-                        item.isMitigated := true
-                        box.set_right(item.id, time)
-                    else
-                        box.set_right(item.id, time + duration)
-                else
-                    box.set_right(item.id, time + duration)
-
-    while array.size(list) > limit
-        FVG oldItem = array.shift(list)
-        box.delete(oldItem.id)
-
-if showBullFVG
-    update_fvg_list(bullList, true, aantBullFVG, colorBullFVG, lineBullFVG)
-if showBearFVG
-    update_fvg_list(bearList, false, aantbearFVG, colorbearFVG, linebearFVG)
