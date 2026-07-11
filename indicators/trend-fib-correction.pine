@@ -17,41 +17,38 @@ trendDown = emaFast1h < emaSlow1h
 grpSwing    = "Swing High/Low - 5M"
 pivotLeft   = input.int(5, "Pivot left bars", group=grpSwing)
 pivotRight  = input.int(5, "Pivot right bars (confirmation)", group=grpSwing)
-minSwingPct = input.float(0.3, "Minimum swing size %  (filters minor highs/lows)", minval=0.0, step=0.1, group=grpSwing)
 
 ph = ta.pivothigh(high, pivotLeft, pivotRight)
 pl = ta.pivotlow(low, pivotLeft, pivotRight)
-
-f_swingPct(a, b) => (na(a) or na(b) or b == 0) ? na : math.abs(a - b) / b * 100
 
 var float lastPivotHigh    = na
 var int   lastPivotHighBar = na
 var float lastPivotLow     = na
 var int   lastPivotLowBar  = na
-var int   zigDir           = 0  // 0 = none yet, 1 = last major point was a high, -1 = last major point was a low
+var bool  highBroken       = true
+var bool  lowBroken        = true
 
-// Only keep a pivot as the major high/low if it either extends the current
-// swing further, or reverses far enough (minSwingPct) from the opposite major
-// point. This filters out minor highs/lows and keeps only the main ones.
+// The major high/low stays fixed once set. A new pivot only replaces it once
+// the current one has been broken by price (or if the new pivot is even more
+// extreme while still unbroken). This keeps only the real, still-standing
+// swing points instead of every small pivot.
 if not na(ph)
-    if zigDir == 1
-        if ph > lastPivotHigh
-            lastPivotHigh    := ph
-            lastPivotHighBar := bar_index - pivotRight
-    else if na(lastPivotLow) or f_swingPct(ph, lastPivotLow) >= minSwingPct
+    if na(lastPivotHigh) or highBroken or ph > lastPivotHigh
         lastPivotHigh    := ph
         lastPivotHighBar := bar_index - pivotRight
-        zigDir            := 1
+        highBroken       := false
 
 if not na(pl)
-    if zigDir == -1
-        if pl < lastPivotLow
-            lastPivotLow    := pl
-            lastPivotLowBar := bar_index - pivotRight
-    else if na(lastPivotHigh) or f_swingPct(lastPivotHigh, pl) >= minSwingPct
+    if na(lastPivotLow) or lowBroken or pl < lastPivotLow
         lastPivotLow    := pl
         lastPivotLowBar := bar_index - pivotRight
-        zigDir           := -1
+        lowBroken       := false
+
+if not na(lastPivotHigh) and close > lastPivotHigh
+    highBroken := true
+
+if not na(lastPivotLow) and close < lastPivotLow
+    lowBroken := true
 
 // ---------------- Fibonacci ----------------
 grpFib   = "Fibonacci Levels"
