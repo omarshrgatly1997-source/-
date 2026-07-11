@@ -1,5 +1,5 @@
 //@version=6
-indicator("omar_shrgatly - Trend+Fib", shorttitle="omar_shrgatly", overlay=true, max_lines_count=100, max_labels_count=100)
+indicator("Omar_trad2025", shorttitle="Omar_trad2025", overlay=true, max_lines_count=100, max_labels_count=100)
 
 // ---------------- Trend (1 hour timeframe) ----------------
 grpTrend   = "Trend - 1H"
