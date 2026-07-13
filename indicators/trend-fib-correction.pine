@@ -12,6 +12,54 @@ slowLen    = input.int(200, "Slow EMA", group=grpTrend)
 trendUp   = emaFast1h > emaSlow1h
 trendDown = emaFast1h < emaSlow1h
 
+// ---------------- Major swing high/low (1 hour timeframe) ----------------
+grpSwing1h    = "Swing High/Low - 1H"
+pivotLeft1h   = input.int(5, "Pivot left bars", group=grpSwing1h)
+pivotRight1h  = input.int(5, "Pivot right bars (confirmation)", group=grpSwing1h)
+
+[ph1h, pl1h, time1h] = request.security(syminfo.tickerid, trendTF, [ta.pivothigh(high, pivotLeft1h, pivotRight1h), ta.pivotlow(low, pivotLeft1h, pivotRight1h), time[pivotRight1h]], lookahead=barmerge.lookahead_off)
+
+var float major1hHigh     = na
+var int   major1hHighTime = na
+var bool  high1hBroken    = true
+
+var float major1hLow      = na
+var int   major1hLowTime  = na
+var bool  low1hBroken     = true
+
+if not na(ph1h)
+    if na(major1hHigh) or high1hBroken or ph1h > major1hHigh
+        major1hHigh     := ph1h
+        major1hHighTime := time1h
+        high1hBroken    := false
+
+if not na(pl1h)
+    if na(major1hLow) or low1hBroken or pl1h < major1hLow
+        major1hLow     := pl1h
+        major1hLowTime := time1h
+        low1hBroken    := false
+
+if not na(major1hHigh) and close > major1hHigh
+    high1hBroken := true
+
+if not na(major1hLow) and close < major1hLow
+    low1hBroken := true
+
+var line l1hHigh = na
+var line l1hLow  = na
+
+if not na(major1hHigh) and not high1hBroken
+    line.delete(l1hHigh)
+    l1hHigh := line.new(major1hHighTime, major1hHigh, time, major1hHigh, xloc=xloc.bar_time, color=color.blue, width=1)
+else
+    line.delete(l1hHigh)
+
+if not na(major1hLow) and not low1hBroken
+    line.delete(l1hLow)
+    l1hLow := line.new(major1hLowTime, major1hLow, time, major1hLow, xloc=xloc.bar_time, color=color.blue, width=1)
+else
+    line.delete(l1hLow)
+
 // ---------------- Swing high/low (5 minute timeframe) ----------------
 // Run this indicator on a 5-minute chart so it reads the correct high/low for that timeframe
 grpSwing    = "Swing High/Low - 5M"
