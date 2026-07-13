@@ -108,23 +108,29 @@ lvl667   = input.float(0.667, "Level 0.667 (entry)",  group=grpFib)
 lvl0     = input.float(0.0,   "Level 0",              group=grpFib)
 lvlExt   = input.float(-1.3,  "Extension level -1.3", group=grpFib)
 
-// Point A = most recent swing high/low in the trend direction (represents level 0)
-// Point B = the older swing high/low before it (represents level 1)
+// Point A = the more recent of the last major high/low (represents level 0)
+// Point B = the other one, older (represents level 1)
+// Direction (legUp) comes from which point is more recent, not from the 1H
+// trend filter -- requiring both to agree left the entry/SL/TP zone hidden
+// most of the time.
 haveLeg = not na(lastPivotHigh) and not na(lastPivotLow)
 
 float pointA     = na
 float pointB     = na
 int   pointBTime = na
+bool  legUp      = na
 
 if haveLeg
-    if trendUp and lastPivotHighTime > lastPivotLowTime
+    if lastPivotHighTime > lastPivotLowTime
         pointA     := lastPivotHigh
         pointB     := lastPivotLow
         pointBTime := lastPivotLowTime
-    else if trendDown and lastPivotLowTime > lastPivotHighTime
+        legUp      := true
+    else if lastPivotLowTime > lastPivotHighTime
         pointA     := lastPivotLow
         pointB     := lastPivotHigh
         pointBTime := lastPivotHighTime
+        legUp      := false
 
 validLeg = not na(pointA) and not na(pointB)
 
@@ -136,18 +142,18 @@ priceLvl667 = validLeg ? f_priceAtLevel(pointA, pointB, lvl667) : na
 priceLvl0   = validLeg ? f_priceAtLevel(pointA, pointB, lvl0)   : na
 priceLvlExt = validLeg ? f_priceAtLevel(pointA, pointB, lvlExt) : na
 
-// Correction = price pulled back past the 0.667 level against the trend -> this is the entry point
-corrected        = validLeg and (trendUp ? close < priceLvl667 : close > priceLvl667)
+// Correction = price pulled back past the 0.667 level against the leg -> this is the entry point
+corrected        = validLeg and (legUp ? close < priceLvl667 : close > priceLvl667)
 correctionStarted = corrected and not corrected[1]
 
 // Stop loss = price breaks past the 0.786 level (deeper than the entry)
-slHit     = validLeg and (trendUp ? close < priceLvl786 : close > priceLvl786)
+slHit     = validLeg and (legUp ? close < priceLvl786 : close > priceLvl786)
 slHitNow  = slHit and not slHit[1]
 
-// TP1 = level 0, TP2 = extension level -1.3 (both in the trend's favorable direction)
-tp1Hit    = validLeg and (trendUp ? close > priceLvl0   : close < priceLvl0)
+// TP1 = level 0, TP2 = extension level -1.3 (both in the leg's favorable direction)
+tp1Hit    = validLeg and (legUp ? close > priceLvl0   : close < priceLvl0)
 tp1HitNow = tp1Hit and not tp1Hit[1]
-tp2Hit    = validLeg and (trendUp ? close > priceLvlExt : close < priceLvlExt)
+tp2Hit    = validLeg and (legUp ? close > priceLvlExt : close < priceLvlExt)
 tp2HitNow = tp2Hit and not tp2Hit[1]
 
 // ---------------- 5M trade stats box ----------------
@@ -217,7 +223,7 @@ if validLeg and not corrected
 
 if corrected
     label.delete(lState)
-    lState := label.new(bar_index, trendUp ? low : high, "Alert: price correction", style=trendUp ? label.style_label_up : label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
+    lState := label.new(bar_index, legUp ? low : high, "Alert: price correction", style=legUp ? label.style_label_up : label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
 
 // ---------------- Entry (0.667), stop loss (0.786), TP1 (0) and TP2 (-1.3) ----------------
 var line  lEntry    = na
@@ -249,13 +255,13 @@ if validLeg
     lTP2Txt   := label.new(bar_index, priceLvlExt, "TP2 " + str.tostring(priceLvlExt, format.mintick), style=label.style_label_left, color=color.purple, textcolor=color.white, size=size.small)
 
 if correctionStarted
-    label.new(bar_index, priceLvl667, trendUp ? "Buy - Entry" : "Sell - Entry", style=trendUp ? label.style_label_up : label.style_label_down, color=color.lime, textcolor=color.black, size=size.small)
+    label.new(bar_index, priceLvl667, legUp ? "Buy - Entry" : "Sell - Entry", style=legUp ? label.style_label_up : label.style_label_down, color=color.lime, textcolor=color.black, size=size.small)
 
 if tp1HitNow
-    label.new(bar_index, priceLvl0, "TP1 hit", style=trendUp ? label.style_label_up : label.style_label_down, color=color.aqua, textcolor=color.black, size=size.small)
+    label.new(bar_index, priceLvl0, "TP1 hit", style=legUp ? label.style_label_up : label.style_label_down, color=color.aqua, textcolor=color.black, size=size.small)
 
 if tp2HitNow
-    label.new(bar_index, priceLvlExt, "TP2 hit", style=trendUp ? label.style_label_up : label.style_label_down, color=color.purple, textcolor=color.white, size=size.small)
+    label.new(bar_index, priceLvlExt, "TP2 hit", style=legUp ? label.style_label_up : label.style_label_down, color=color.purple, textcolor=color.white, size=size.small)
 
 alertcondition(correctionStarted, title="Entry alert at 0.667", message="Entry point: price reached the 0.667 level")
 alertcondition(slHitNow, title="Stop loss alert at 0.786", message="Stop loss breached at the 0.786 level")
