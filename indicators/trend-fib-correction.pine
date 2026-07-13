@@ -118,7 +118,7 @@ haveLeg = not na(lastPivotHigh) and not na(lastPivotLow)
 float pointA     = na
 float pointB     = na
 int   pointBTime = na
-bool  legUp      = na
+bool  legUp      = false
 
 if haveLeg
     if lastPivotHighTime > lastPivotLowTime
