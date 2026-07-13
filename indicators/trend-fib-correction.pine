@@ -21,28 +21,30 @@ pivotRight  = input.int(5, "Pivot right bars (confirmation)", group=grpSwing)
 ph = ta.pivothigh(high, pivotLeft, pivotRight)
 pl = ta.pivotlow(low, pivotLeft, pivotRight)
 
-var float lastPivotHigh    = na
-var int   lastPivotHighBar = na
-var float lastPivotLow     = na
-var int   lastPivotLowBar  = na
-var bool  highBroken       = true
-var bool  lowBroken        = true
+var float lastPivotHigh     = na
+var int   lastPivotHighTime = na
+var float lastPivotLow      = na
+var int   lastPivotLowTime  = na
+var bool  highBroken        = true
+var bool  lowBroken         = true
 
 // The major high/low stays fixed once set. A new pivot only replaces it once
 // the current one has been broken by price (or if the new pivot is even more
 // extreme while still unbroken). This keeps only the real, still-standing
 // swing points instead of every small pivot.
+// Anchored by time (not bar index) since price can keep an unbroken high/low
+// for more than 10,000 bars, which bar-index-based lines cannot handle.
 if not na(ph)
     if na(lastPivotHigh) or highBroken or ph > lastPivotHigh
-        lastPivotHigh    := ph
-        lastPivotHighBar := bar_index - pivotRight
-        highBroken       := false
+        lastPivotHigh     := ph
+        lastPivotHighTime := time[pivotRight]
+        highBroken        := false
 
 if not na(pl)
     if na(lastPivotLow) or lowBroken or pl < lastPivotLow
-        lastPivotLow    := pl
-        lastPivotLowBar := bar_index - pivotRight
-        lowBroken       := false
+        lastPivotLow     := pl
+        lastPivotLowTime := time[pivotRight]
+        lowBroken        := false
 
 if not na(lastPivotHigh) and close > lastPivotHigh
     highBroken := true
@@ -62,19 +64,19 @@ lvlExt   = input.float(-1.3,  "Extension level -1.3", group=grpFib)
 // Point B = the older swing high/low before it (represents level 1)
 haveLeg = not na(lastPivotHigh) and not na(lastPivotLow)
 
-float pointA    = na
-float pointB    = na
-int   pointBBar = na
+float pointA     = na
+float pointB     = na
+int   pointBTime = na
 
 if haveLeg
-    if trendUp and lastPivotHighBar > lastPivotLowBar
-        pointA    := lastPivotHigh
-        pointB    := lastPivotLow
-        pointBBar := lastPivotLowBar
-    else if trendDown and lastPivotLowBar > lastPivotHighBar
-        pointA    := lastPivotLow
-        pointB    := lastPivotHigh
-        pointBBar := lastPivotHighBar
+    if trendUp and lastPivotHighTime > lastPivotLowTime
+        pointA     := lastPivotHigh
+        pointB     := lastPivotLow
+        pointBTime := lastPivotLowTime
+    else if trendDown and lastPivotLowTime > lastPivotHighTime
+        pointA     := lastPivotLow
+        pointB     := lastPivotHigh
+        pointBTime := lastPivotHighTime
 
 validLeg = not na(pointA) and not na(pointB)
 
@@ -111,7 +113,7 @@ var int  lossCount   = 0
 var bool tradeOpen   = false
 var bool tp1Achieved = false
 
-newLeg = validLeg and (na(pointBBar[1]) or pointBBar != pointBBar[1])
+newLeg = validLeg and (na(pointBTime[1]) or pointBTime != pointBTime[1])
 
 if newLeg
     tradeOpen   := false
@@ -161,7 +163,7 @@ if validLeg and not corrected
     line.delete(l1)
     label.delete(lState)
 
-    l1 := line.new(pointBBar, priceLvl1, bar_index, priceLvl1, color=color.gray, style=line.style_dashed)
+    l1 := line.new(pointBTime, priceLvl1, time, priceLvl1, xloc=xloc.bar_time, color=color.gray, style=line.style_dashed)
 
     lState := label.new(bar_index, priceLvl1, "No correction - Fib active", style=label.style_label_down, color=color.blue, textcolor=color.white, size=size.small)
 
@@ -189,10 +191,10 @@ if validLeg
     label.delete(lTP1Txt)
     label.delete(lTP2Txt)
 
-    lEntry    := line.new(pointBBar, priceLvl667, bar_index, priceLvl667, color=color.lime, width=2)
-    lSL       := line.new(pointBBar, priceLvl786, bar_index, priceLvl786, color=color.red,  width=2, style=line.style_dashed)
-    lTP1      := line.new(pointBBar, priceLvl0,   bar_index, priceLvl0,   color=color.aqua,   width=2)
-    lTP2      := line.new(pointBBar, priceLvlExt, bar_index, priceLvlExt, color=color.purple, width=2, style=line.style_dotted)
+    lEntry    := line.new(pointBTime, priceLvl667, time, priceLvl667, xloc=xloc.bar_time, color=color.lime, width=2)
+    lSL       := line.new(pointBTime, priceLvl786, time, priceLvl786, xloc=xloc.bar_time, color=color.red,  width=2, style=line.style_dashed)
+    lTP1      := line.new(pointBTime, priceLvl0,   time, priceLvl0,   xloc=xloc.bar_time, color=color.aqua,   width=2)
+    lTP2      := line.new(pointBTime, priceLvlExt, time, priceLvlExt, xloc=xloc.bar_time, color=color.purple, width=2, style=line.style_dotted)
     lEntryTxt := label.new(bar_index, priceLvl667, "Entry " + str.tostring(priceLvl667, format.mintick), style=label.style_label_left, color=color.lime, textcolor=color.black, size=size.small)
     lSLTxt    := label.new(bar_index, priceLvl786, "Stop loss " + str.tostring(priceLvl786, format.mintick), style=label.style_label_left, color=color.red, textcolor=color.white, size=size.small)
     lTP1Txt   := label.new(bar_index, priceLvl0,   "TP1 " + str.tostring(priceLvl0, format.mintick), style=label.style_label_left, color=color.aqua, textcolor=color.black, size=size.small)
