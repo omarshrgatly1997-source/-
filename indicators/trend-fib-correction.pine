@@ -135,7 +135,7 @@ if tradeOpen and slHitNow
     tradeOpen := false
 
 resolvedTrades = tp1Count + lossCount
-winRateTxt     = resolvedTrades > 0 ? str.tostring(float(tp1Count) / resolvedTrades * 100, "#.#") + "%" : "-"
+winRateTxt     = resolvedTrades > 0 ? str.tostring(tp1Count * 100.0 / resolvedTrades, "#.#") + "%" : "-"
 
 var table statsBox = table.new(position.top_right, 2, 6, border_width=1, border_color=color.gray, frame_color=color.gray, frame_width=1)
 
