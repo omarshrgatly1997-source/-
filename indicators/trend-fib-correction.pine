@@ -14,6 +14,12 @@ colStructBear = input.color(color.red, "Expansion Down (LL)", group=grp_struct)
 colStructInt  = input.color(color.gray, "Internal (LH/HL)", group=grp_struct)
 widthStruct   = input.int(2, "Connection Width", group=grp_struct)
 
+grp_break = "Breaks (BOS / CHoCH)"
+showBreakLines = input.bool(true, "Show Level Line From Each High/Low", group=grp_break)
+colBOS         = input.color(color.green, "BOS Color (body closed through)", group=grp_break)
+colCHoCH       = input.color(color.orange, "CHoCH Color (wick only)", group=grp_break)
+lblSize        = input.string(size.small, "Label Size", options=[size.tiny, size.small, size.normal], group=grp_break)
+
 // ==========================================
 // 🔹 SWING HIGH/LOW CONFIRMATION TRIGGER (3-candle imbalance)
 // ==========================================
@@ -28,7 +34,14 @@ var float lastConfirmedPrice = na
 var int lastConfirmedTime = 0
 
 var float activeOldHighPrice = na
+var int   activeOldHighTime  = na
+var bool  highBroken         = true
+var line  lineActiveHigh     = na
+
 var float activeOldLowPrice = na
+var int   activeOldLowTime  = na
+var bool  lowBroken         = true
+var line  lineActiveLow     = na
 
 // ==========================================
 // 🔹 STRUCTURE UPDATE LOGIC (finds & confirms the swing high / swing low)
@@ -54,6 +67,8 @@ if mode == 1 // Searching for a High
             line.new(lastConfirmedTime, lastConfirmedPrice, tempPeakTime, tempPeakPrice, xloc=xloc.bar_time, color=legColor, width=widthStruct)
 
         activeOldHighPrice := tempPeakPrice
+        activeOldHighTime  := tempPeakTime
+        highBroken         := false
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
@@ -82,6 +97,8 @@ else if mode == -1 // Searching for a Low
             line.new(lastConfirmedTime, lastConfirmedPrice, tempPeakTime, tempPeakPrice, xloc=xloc.bar_time, color=legColor, width=widthStruct)
 
         activeOldLowPrice := tempPeakPrice
+        activeOldLowTime  := tempPeakTime
+        lowBroken         := false
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
@@ -97,6 +114,8 @@ else if mode == 0 // Start up
         lastConfirmedPrice := low[2]
         lastConfirmedTime := time[2]
         activeOldLowPrice := low[2]
+        activeOldLowTime  := time[2]
+        lowBroken         := false
     else if bearFVG
         mode := -1
         tempPeakPrice := low
@@ -104,3 +123,27 @@ else if mode == 0 // Start up
         lastConfirmedPrice := high[2]
         lastConfirmedTime := time[2]
         activeOldHighPrice := high[2]
+        activeOldHighTime  := time[2]
+        highBroken         := false
+
+// ==========================================
+// 🔹 BREAK DETECTION (BOS / CHoCH) on the active (unbroken) high/low
+// ==========================================
+// BOS  = the breaking candle's body (close) closed through the level.
+// CHoCH = only the wick reached through it, the close stayed back inside.
+if not na(activeOldHighPrice) and not highBroken and high > activeOldHighPrice
+    highBroken := true
+    label.new(bar_index, high, close > activeOldHighPrice ? "BOS" : "CHoCH", style=label.style_label_down, color=close > activeOldHighPrice ? colBOS : colCHoCH, textcolor=color.white, size=lblSize)
+
+if not na(activeOldLowPrice) and not lowBroken and low < activeOldLowPrice
+    lowBroken := true
+    label.new(bar_index, low, close < activeOldLowPrice ? "BOS" : "CHoCH", style=label.style_label_up, color=close < activeOldLowPrice ? colBOS : colCHoCH, textcolor=color.white, size=lblSize)
+
+if showBreakLines
+    if not na(activeOldHighPrice) and not highBroken
+        line.delete(lineActiveHigh)
+        lineActiveHigh := line.new(activeOldHighTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=colStructInt, style=line.style_dashed, width=1)
+
+    if not na(activeOldLowPrice) and not lowBroken
+        line.delete(lineActiveLow)
+        lineActiveLow := line.new(activeOldLowTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=colStructInt, style=line.style_dashed, width=1)
