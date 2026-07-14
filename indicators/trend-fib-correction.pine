@@ -16,9 +16,8 @@ widthStruct   = input.int(2, "Connection Width", group=grp_struct)
 
 grp_break = "Breaks (BOS / CHoCH)"
 showBreakLines = input.bool(true, "Show Level Line From Each High/Low", group=grp_break)
-colBOS         = input.color(color.green, "BOS Color (body closed through)", group=grp_break)
-colCHoCH       = input.color(color.orange, "CHoCH Color (wick only)", group=grp_break)
-lblSize        = input.string(size.small, "Label Size", options=[size.tiny, size.small, size.normal], group=grp_break)
+colBOS         = input.color(color.white, "BOS Color (body closed through)", group=grp_break)
+colCHoCH       = input.color(color.red,   "CHoCH Color (wick only)", group=grp_break)
 
 // ==========================================
 // 🔹 SWING HIGH/LOW CONFIRMATION TRIGGER (3-candle imbalance)
@@ -129,15 +128,22 @@ else if mode == 0 // Start up
 // ==========================================
 // 🔹 BREAK DETECTION (BOS / CHoCH) on the active (unbroken) high/low
 // ==========================================
-// BOS  = the breaking candle's body (close) closed through the level.
-// CHoCH = only the wick reached through it, the close stayed back inside.
+// BOS  = the breaking candle's body (close) closed through the level -> line turns white.
+// CHoCH = only the wick reached through it, the close stayed back inside -> line turns red.
+// No text label, just the line itself changes color and freezes at the break bar.
 if not na(activeOldHighPrice) and not highBroken and high > activeOldHighPrice
     highBroken := true
-    label.new(bar_index, high, close > activeOldHighPrice ? "BOS" : "CHoCH", style=label.style_label_down, color=close > activeOldHighPrice ? colBOS : colCHoCH, textcolor=color.white, size=lblSize)
+    if not na(lineActiveHigh)
+        line.set_x2(lineActiveHigh, time)
+        line.set_color(lineActiveHigh, close > activeOldHighPrice ? colBOS : colCHoCH)
+        line.set_style(lineActiveHigh, line.style_solid)
 
 if not na(activeOldLowPrice) and not lowBroken and low < activeOldLowPrice
     lowBroken := true
-    label.new(bar_index, low, close < activeOldLowPrice ? "BOS" : "CHoCH", style=label.style_label_up, color=close < activeOldLowPrice ? colBOS : colCHoCH, textcolor=color.white, size=lblSize)
+    if not na(lineActiveLow)
+        line.set_x2(lineActiveLow, time)
+        line.set_color(lineActiveLow, close < activeOldLowPrice ? colBOS : colCHoCH)
+        line.set_style(lineActiveLow, line.style_solid)
 
 if showBreakLines
     if not na(activeOldHighPrice) and not highBroken
