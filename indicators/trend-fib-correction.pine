@@ -1,5 +1,5 @@
 //@version=6
-indicator("TB 5.1 - IRL -> ERL", overlay=true, max_lines_count=500, max_labels_count=200)
+indicator("TB 5.1 - IRL -> ERL", overlay=true, max_lines_count=500, max_labels_count=200, max_boxes_count=50)
 
 // ==========================================
 // MARKET STRUCTURE SETTINGS
@@ -22,6 +22,12 @@ lvl786   = input.float(0.786, "Level 0.786 (stop loss)",     group=grp_fib)
 lvl667   = input.float(0.667, "Level 0.667 (entry)",         group=grp_fib)
 lvl0     = input.float(0.0,   "Level 0",                     group=grp_fib)
 lvlExt   = input.float(-1.3,  "Extension level -1.3 (TP2)",  group=grp_fib)
+
+grp_ob = "Order Blocks"
+showOB     = input.bool(true, "Show Order Blocks", group=grp_ob)
+colBullOB  = input.color(color.new(color.blue, 70),   "Bullish OB", group=grp_ob)
+colBearOB  = input.color(color.new(color.orange, 70), "Bearish OB", group=grp_ob)
+obLookback = input.int(50, "Order Block Lookback (bars)", minval=1, group=grp_ob)
 
 // ==========================================
 // SWING HIGH/LOW CONFIRMATION TRIGGER (3-candle imbalance)
@@ -65,6 +71,26 @@ var bool tp1Achieved = false
 var label lBuySellEntry = na
 var label lTp1Hit       = na
 var label lTp2Hit       = na
+
+// Order blocks -- one active bullish and one active bearish box, frozen once mitigated
+var box  bullOB          = na
+var box  bearOB          = na
+var bool bullOBMitigated = true
+var bool bearOBMitigated = true
+
+// Finds the nearest opposite-colored candle before the current bar (the Order Block source candle)
+f_findOB(bullish, lookback) =>
+    float obTop  = na
+    float obBot  = na
+    int   obTime = na
+    for i = 1 to lookback
+        bool isOpposite = bullish ? close[i] < open[i] : close[i] > open[i]
+        if isOpposite
+            obTop  := high[i]
+            obBot  := low[i]
+            obTime := time[i]
+            break
+    [obTop, obBot, obTime]
 
 // ==========================================
 // STRUCTURE UPDATE LOGIC (finds & confirms the swing high / swing low)
@@ -173,13 +199,42 @@ else if mode == 0 // Start up
 // gets deleted when the next high/low cycle starts drawing its own preview line.
 if not na(activeOldHighPrice) and not highBroken and high > activeOldHighPrice
     highBroken := true
+    bool highIsBOS = close > activeOldHighPrice
     line.delete(lineActiveHigh)
-    line.new(activeOldHighTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=close > activeOldHighPrice ? colBOS : colCHoCH, style=line.style_solid, width=2)
+    line.new(activeOldHighTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=highIsBOS ? colBOS : colCHoCH, style=line.style_solid, width=2)
+
+    // Bullish Order Block: last bearish candle before the break that caused a BOS
+    if highIsBOS and showOB
+        [obTop, obBot, obTime] = f_findOB(true, obLookback)
+        if not na(obTop)
+            box.delete(bullOB)
+            bullOB := box.new(obTime, obTop, time, obBot, xloc=xloc.bar_time, border_color=colBullOB, bgcolor=colBullOB)
+            bullOBMitigated := false
 
 if not na(activeOldLowPrice) and not lowBroken and low < activeOldLowPrice
     lowBroken := true
+    bool lowIsBOS = close < activeOldLowPrice
     line.delete(lineActiveLow)
-    line.new(activeOldLowTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=close < activeOldLowPrice ? colBOS : colCHoCH, style=line.style_solid, width=2)
+    line.new(activeOldLowTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=lowIsBOS ? colBOS : colCHoCH, style=line.style_solid, width=2)
+
+    // Bearish Order Block: last bullish candle before the break that caused a BOS
+    if lowIsBOS and showOB
+        [obTop, obBot, obTime] = f_findOB(false, obLookback)
+        if not na(obTop)
+            box.delete(bearOB)
+            bearOB := box.new(obTime, obTop, time, obBot, xloc=xloc.bar_time, border_color=colBearOB, bgcolor=colBearOB)
+            bearOBMitigated := false
+
+// Extend each active order block box to the current bar; freeze it once price trades back into the zone
+if not bullOBMitigated and not na(bullOB)
+    box.set_right(bullOB, time)
+    if low <= box.get_top(bullOB)
+        bullOBMitigated := true
+
+if not bearOBMitigated and not na(bearOB)
+    box.set_right(bearOB, time)
+    if high >= box.get_bottom(bearOB)
+        bearOBMitigated := true
 
 if showBreakLines
     if not na(activeOldHighPrice) and not highBroken
