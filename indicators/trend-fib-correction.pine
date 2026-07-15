@@ -130,20 +130,18 @@ else if mode == 0 // Start up
 // ==========================================
 // BOS  = the breaking candle's body (close) closed through the level -> line turns white.
 // CHoCH = only the wick reached through it, the close stayed back inside -> line turns red.
-// No text label, just the line itself changes color and freezes at the break bar.
+// The broken line is a brand new, independent line object (not the reused
+// "active" line variable) so it stays on the chart permanently -- it never
+// gets deleted when the next high/low cycle starts drawing its own preview line.
 if not na(activeOldHighPrice) and not highBroken and high > activeOldHighPrice
     highBroken := true
-    if not na(lineActiveHigh)
-        line.set_x2(lineActiveHigh, time)
-        line.set_color(lineActiveHigh, close > activeOldHighPrice ? colBOS : colCHoCH)
-        line.set_style(lineActiveHigh, line.style_solid)
+    line.delete(lineActiveHigh)
+    line.new(activeOldHighTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=close > activeOldHighPrice ? colBOS : colCHoCH, style=line.style_solid, width=2)
 
 if not na(activeOldLowPrice) and not lowBroken and low < activeOldLowPrice
     lowBroken := true
-    if not na(lineActiveLow)
-        line.set_x2(lineActiveLow, time)
-        line.set_color(lineActiveLow, close < activeOldLowPrice ? colBOS : colCHoCH)
-        line.set_style(lineActiveLow, line.style_solid)
+    line.delete(lineActiveLow)
+    line.new(activeOldLowTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=close < activeOldLowPrice ? colBOS : colCHoCH, style=line.style_solid, width=2)
 
 if showBreakLines
     if not na(activeOldHighPrice) and not highBroken
