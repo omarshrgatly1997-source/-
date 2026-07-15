@@ -64,6 +64,11 @@ var int  lossCount   = 0
 var bool tradeOpen   = false
 var bool tp1Achieved = false
 
+// Event markers for the current trade only -- cleared whenever a new leg starts
+var label lBuySellEntry = na
+var label lTp1Hit       = na
+var label lTp2Hit       = na
+
 // ==========================================
 // 🔹 STRUCTURE UPDATE LOGIC (finds & confirms the swing high / swing low)
 // ==========================================
@@ -99,6 +104,9 @@ if mode == 1 // Searching for a High
         validLeg    := not na(pointB)
         tradeOpen   := false
         tp1Achieved := false
+        label.delete(lBuySellEntry)
+        label.delete(lTp1Hit)
+        label.delete(lTp2Hit)
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
@@ -138,6 +146,9 @@ else if mode == -1 // Searching for a Low
         validLeg    := not na(pointB)
         tradeOpen   := false
         tp1Achieved := false
+        label.delete(lBuySellEntry)
+        label.delete(lTp1Hit)
+        label.delete(lTp2Hit)
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
@@ -290,13 +301,16 @@ if validLeg
     lTP2Txt   := label.new(bar_index, priceLvlExt, "TP2 " + str.tostring(priceLvlExt, format.mintick), style=label.style_label_left, color=color.purple, textcolor=color.white, size=size.small)
 
 if correctionStarted
-    label.new(bar_index, priceLvl667, legUp ? "Buy - Entry" : "Sell - Entry", style=legUp ? label.style_label_up : label.style_label_down, color=color.lime, textcolor=color.black, size=size.small)
+    label.delete(lBuySellEntry)
+    lBuySellEntry := label.new(bar_index, priceLvl667, legUp ? "Buy - Entry" : "Sell - Entry", style=legUp ? label.style_label_up : label.style_label_down, color=color.lime, textcolor=color.black, size=size.small)
 
 if tp1HitNow
-    label.new(bar_index, priceLvl0, "TP1 hit", style=legUp ? label.style_label_up : label.style_label_down, color=color.aqua, textcolor=color.black, size=size.small)
+    label.delete(lTp1Hit)
+    lTp1Hit := label.new(bar_index, priceLvl0, "TP1 hit", style=legUp ? label.style_label_up : label.style_label_down, color=color.aqua, textcolor=color.black, size=size.small)
 
 if tp2HitNow
-    label.new(bar_index, priceLvlExt, "TP2 hit", style=legUp ? label.style_label_up : label.style_label_down, color=color.purple, textcolor=color.white, size=size.small)
+    label.delete(lTp2Hit)
+    lTp2Hit := label.new(bar_index, priceLvlExt, "TP2 hit", style=legUp ? label.style_label_up : label.style_label_down, color=color.purple, textcolor=color.white, size=size.small)
 
 alertcondition(correctionStarted, title="Entry alert at 0.667", message="Entry point: price reached the 0.667 level")
 alertcondition(slHitNow, title="Stop loss alert at 0.786", message="Stop loss breached at the 0.786 level")
