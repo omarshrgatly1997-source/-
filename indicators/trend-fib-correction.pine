@@ -76,17 +76,11 @@ if mode == 1 // Searching for a High
 
     if bearFVG
         // Confirm the High (we came from Low -> High)
-        if showStructure
-            // Is this High higher than the previous confirmed High?
-            color legColor = colStructInt
-            if not na(activeOldHighPrice)
-                if tempPeakPrice > activeOldHighPrice
-                    legColor := colStructBull // HH = Expansion Up
-                else
-                    legColor := colStructInt // LH = Internal
-            else
-                legColor := colStructInt // First line
+        // Expansion Up (HH, green line) only -- an Internal High (LH, gray line) does not start a new leg/trade
+        bool isExpansion = not na(activeOldHighPrice) and tempPeakPrice > activeOldHighPrice
 
+        if showStructure
+            color legColor = isExpansion ? colStructBull : colStructInt
             line.new(lastConfirmedTime, lastConfirmedPrice, tempPeakTime, tempPeakPrice, xloc=xloc.bar_time, color=legColor, width=widthStruct)
 
         activeOldHighPrice := tempPeakPrice
@@ -94,16 +88,17 @@ if mode == 1 // Searching for a High
         highBroken         := false
 
         // New leg: from the old confirmed Low (pointB) to this new High (pointA)
-        pointA      := tempPeakPrice
-        pointB      := lastConfirmedPrice
-        pointBTime  := lastConfirmedTime
-        legUp       := true
-        validLeg    := not na(pointB)
-        tradeOpen   := false
-        tp1Achieved := false
-        label.delete(lBuySellEntry)
-        label.delete(lTp1Hit)
-        label.delete(lTp2Hit)
+        if isExpansion
+            pointA      := tempPeakPrice
+            pointB      := lastConfirmedPrice
+            pointBTime  := lastConfirmedTime
+            legUp       := true
+            validLeg    := not na(pointB)
+            tradeOpen   := false
+            tp1Achieved := false
+            label.delete(lBuySellEntry)
+            label.delete(lTp1Hit)
+            label.delete(lTp2Hit)
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
@@ -118,17 +113,11 @@ else if mode == -1 // Searching for a Low
 
     if bullFVG
         // Confirm the Low (we came from High -> Low)
-        if showStructure
-            // Is this Low lower than the previous confirmed Low?
-            color legColor = colStructInt
-            if not na(activeOldLowPrice)
-                if tempPeakPrice < activeOldLowPrice
-                    legColor := colStructBear // LL = Expansion Down
-                else
-                    legColor := colStructInt // HL = Internal
-            else
-                legColor := colStructInt
+        // Expansion Down (LL, red line) only -- an Internal Low (HL, gray line) does not start a new leg/trade
+        bool isExpansion = not na(activeOldLowPrice) and tempPeakPrice < activeOldLowPrice
 
+        if showStructure
+            color legColor = isExpansion ? colStructBear : colStructInt
             line.new(lastConfirmedTime, lastConfirmedPrice, tempPeakTime, tempPeakPrice, xloc=xloc.bar_time, color=legColor, width=widthStruct)
 
         activeOldLowPrice := tempPeakPrice
@@ -136,16 +125,17 @@ else if mode == -1 // Searching for a Low
         lowBroken         := false
 
         // New leg: from the old confirmed High (pointB) to this new Low (pointA)
-        pointA      := tempPeakPrice
-        pointB      := lastConfirmedPrice
-        pointBTime  := lastConfirmedTime
-        legUp       := false
-        validLeg    := not na(pointB)
-        tradeOpen   := false
-        tp1Achieved := false
-        label.delete(lBuySellEntry)
-        label.delete(lTp1Hit)
-        label.delete(lTp2Hit)
+        if isExpansion
+            pointA      := tempPeakPrice
+            pointB      := lastConfirmedPrice
+            pointBTime  := lastConfirmedTime
+            legUp       := false
+            validLeg    := not na(pointB)
+            tradeOpen   := false
+            tp1Achieved := false
+            label.delete(lBuySellEntry)
+            label.delete(lTp1Hit)
+            label.delete(lTp2Hit)
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
