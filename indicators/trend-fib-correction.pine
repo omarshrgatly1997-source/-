@@ -1,11 +1,8 @@
-// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © RobinTShark
-
 //@version=6
 indicator("TB 5.1 - IRL -> ERL", overlay=true, max_lines_count=500, max_labels_count=200)
 
 // ==========================================
-// 🔹 MARKET STRUCTURE SETTINGS
+// MARKET STRUCTURE SETTINGS
 // ==========================================
 grp_struct = "Market Structure"
 showStructure = input.bool(true, "Show Connection Lines", group=grp_struct)
@@ -27,7 +24,7 @@ lvl0     = input.float(0.0,   "Level 0",                     group=grp_fib)
 lvlExt   = input.float(-1.3,  "Extension level -1.3 (TP2)",  group=grp_fib)
 
 // ==========================================
-// 🔹 SWING HIGH/LOW CONFIRMATION TRIGGER (3-candle imbalance)
+// SWING HIGH/LOW CONFIRMATION TRIGGER (3-candle imbalance)
 // ==========================================
 bullFVG = low > high[2]
 bearFVG = low[2] > high
@@ -70,7 +67,7 @@ var label lTp1Hit       = na
 var label lTp2Hit       = na
 
 // ==========================================
-// 🔹 STRUCTURE UPDATE LOGIC (finds & confirms the swing high / swing low)
+// STRUCTURE UPDATE LOGIC (finds & confirms the swing high / swing low)
 // ==========================================
 if mode == 1 // Searching for a High
     if high > tempPeakPrice
@@ -177,7 +174,7 @@ else if mode == 0 // Start up
         highBroken         := false
 
 // ==========================================
-// 🔹 BREAK DETECTION (BOS / CHoCH) on the active (unbroken) high/low
+// BREAK DETECTION (BOS / CHoCH) on the active (unbroken) high/low
 // ==========================================
 // BOS  = the breaking candle's body (close) closed through the level -> line turns white.
 // CHoCH = only the wick reached through it, the close stayed back inside -> line turns red.
@@ -204,7 +201,7 @@ if showBreakLines
         lineActiveLow := line.new(activeOldLowTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=colStructInt, style=line.style_dashed, width=1)
 
 // ==========================================
-// 🔹 FIBONACCI ON EACH CONFIRMED HIGH/LOW -> ENTRY / SL / TP1 / TP2
+// FIBONACCI ON EACH CONFIRMED HIGH/LOW -> ENTRY / SL / TP1 / TP2
 // ==========================================
 // pointA = the point just confirmed (level 0), pointB = the one before it (level 1).
 // legUp = true means pointA is a High (a Buy pullback setup); false means pointA
