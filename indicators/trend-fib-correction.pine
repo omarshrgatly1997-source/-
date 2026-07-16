@@ -10,8 +10,8 @@ colStructBull = input.color(color.green, "Expansion Up (HH)", group=grp_struct)
 colStructBear = input.color(color.red, "Expansion Down (LL)", group=grp_struct)
 colStructInt  = input.color(color.gray, "Internal (LH/HL)", group=grp_struct)
 widthStruct   = input.int(2, "Connection Width", group=grp_struct)
-minBarsBetweenSwings = input.int(20, "Minimum Candles Between Swing Points", minval=1, group=grp_struct)
-minMovePercent = input.float(0.3, "Minimum Move % Between Swing Points", minval=0.0, step=0.05, group=grp_struct)
+minBarsBetweenSwings = input.int(10, "Minimum Candles Between Swing Points", minval=1, group=grp_struct)
+minMovePercent = input.float(0.1, "Minimum Move % Between Swing Points", minval=0.0, step=0.05, group=grp_struct)
 
 grp_break = "Breaks (BOS / Touch)"
 showBreakLines = input.bool(true, "Show Level Line From Each High/Low", group=grp_break)
