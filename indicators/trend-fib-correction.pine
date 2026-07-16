@@ -11,10 +11,10 @@ colStructBear = input.color(color.red, "Expansion Down (LL)", group=grp_struct)
 colStructInt  = input.color(color.gray, "Internal (LH/HL)", group=grp_struct)
 widthStruct   = input.int(2, "Connection Width", group=grp_struct)
 
-grp_break = "Breaks (BOS / CHoCH)"
+grp_break = "Breaks (BOS / Touch)"
 showBreakLines = input.bool(true, "Show Level Line From Each High/Low", group=grp_break)
 colBOS         = input.color(color.white, "BOS Color (body closed through)", group=grp_break)
-colCHoCH       = input.color(color.red,   "CHoCH Color (wick only)", group=grp_break)
+colTouch       = input.color(color.blue,  "Touch Color (wick only, level stays active)", group=grp_break)
 
 grp_fib = "Fibonacci & Trade"
 lvl1     = input.float(1.0,   "Level 1",                    group=grp_fib)
@@ -164,22 +164,28 @@ else if mode == 0 // Start up
         highBroken         := false
 
 // ==========================================
-// BREAK DETECTION (BOS / CHoCH) on the active (unbroken) high/low
+// BREAK DETECTION (BOS / Touch) on the active (unbroken) high/low
 // ==========================================
-// BOS  = the breaking candle's body (close) closed through the level -> line turns white.
-// CHoCH = only the wick reached through it, the close stayed back inside -> line turns red.
-// The broken line is a brand new, independent line object (not the reused
-// "active" line variable) so it stays on the chart permanently -- it never
-// gets deleted when the next high/low cycle starts drawing its own preview line.
+// BOS   = the breaking candle's body (close) closed through the level -> permanent white line, level marked broken.
+// Touch = only the wick reached through it, the close stayed back inside -> permanent blue line, level stays active.
+// The permanent line is a brand new, independent line object (not the reused
+// "active" line variable) so it stays on the chart forever -- it never gets
+// deleted when the next high/low cycle starts drawing its own preview line.
 if not na(activeOldHighPrice) and not highBroken and high > activeOldHighPrice
-    highBroken := true
-    line.delete(lineActiveHigh)
-    line.new(activeOldHighTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=close > activeOldHighPrice ? colBOS : colCHoCH, style=line.style_solid, width=2)
+    if close > activeOldHighPrice
+        highBroken := true
+        line.delete(lineActiveHigh)
+        line.new(activeOldHighTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=colBOS, style=line.style_solid, width=2)
+    else
+        line.new(activeOldHighTime, activeOldHighPrice, time, activeOldHighPrice, xloc=xloc.bar_time, color=colTouch, style=line.style_solid, width=2)
 
 if not na(activeOldLowPrice) and not lowBroken and low < activeOldLowPrice
-    lowBroken := true
-    line.delete(lineActiveLow)
-    line.new(activeOldLowTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=close < activeOldLowPrice ? colBOS : colCHoCH, style=line.style_solid, width=2)
+    if close < activeOldLowPrice
+        lowBroken := true
+        line.delete(lineActiveLow)
+        line.new(activeOldLowTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=colBOS, style=line.style_solid, width=2)
+    else
+        line.new(activeOldLowTime, activeOldLowPrice, time, activeOldLowPrice, xloc=xloc.bar_time, color=colTouch, style=line.style_solid, width=2)
 
 if showBreakLines
     if not na(activeOldHighPrice) and not highBroken
