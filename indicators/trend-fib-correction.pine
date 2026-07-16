@@ -86,17 +86,19 @@ if mode == 1 // Searching for a High
         activeOldHighTime  := tempPeakTime
         highBroken         := false
 
-        // New leg: from the old confirmed Low (pointB) to this new High (pointA) -- every confirmed High, Expansion or Internal, starts a new leg/trade
-        pointA      := tempPeakPrice
-        pointB      := lastConfirmedPrice
-        pointBTime  := lastConfirmedTime
-        legUp       := true
-        validLeg    := not na(pointB)
-        tradeOpen   := false
-        tp1Achieved := false
-        label.delete(lBuySellEntry)
-        label.delete(lTp1Hit)
-        label.delete(lTp2Hit)
+        // New leg: from the old confirmed Low (pointB) to this new High (pointA)
+        // Expansion Up (HH, green line) only -- an Internal High (LH, gray line) does not start a new leg/trade
+        if isExpansion
+            pointA      := tempPeakPrice
+            pointB      := lastConfirmedPrice
+            pointBTime  := lastConfirmedTime
+            legUp       := true
+            validLeg    := not na(pointB)
+            tradeOpen   := false
+            tp1Achieved := false
+            label.delete(lBuySellEntry)
+            label.delete(lTp1Hit)
+            label.delete(lTp2Hit)
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
@@ -121,17 +123,19 @@ else if mode == -1 // Searching for a Low
         activeOldLowTime  := tempPeakTime
         lowBroken         := false
 
-        // New leg: from the old confirmed High (pointB) to this new Low (pointA) -- every confirmed Low, Expansion or Internal, starts a new leg/trade
-        pointA      := tempPeakPrice
-        pointB      := lastConfirmedPrice
-        pointBTime  := lastConfirmedTime
-        legUp       := false
-        validLeg    := not na(pointB)
-        tradeOpen   := false
-        tp1Achieved := false
-        label.delete(lBuySellEntry)
-        label.delete(lTp1Hit)
-        label.delete(lTp2Hit)
+        // New leg: from the old confirmed High (pointB) to this new Low (pointA)
+        // Expansion Down (LL, red line) only -- an Internal Low (HL, gray line) does not start a new leg/trade
+        if isExpansion
+            pointA      := tempPeakPrice
+            pointB      := lastConfirmedPrice
+            pointBTime  := lastConfirmedTime
+            legUp       := false
+            validLeg    := not na(pointB)
+            tradeOpen   := false
+            tp1Achieved := false
+            label.delete(lBuySellEntry)
+            label.delete(lTp1Hit)
+            label.delete(lTp2Hit)
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
