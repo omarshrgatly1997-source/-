@@ -10,6 +10,7 @@ colStructBull = input.color(color.green, "Expansion Up (HH)", group=grp_struct)
 colStructBear = input.color(color.red, "Expansion Down (LL)", group=grp_struct)
 colStructInt  = input.color(color.gray, "Internal (LH/HL)", group=grp_struct)
 widthStruct   = input.int(2, "Connection Width", group=grp_struct)
+minBarsBetweenSwings = input.int(20, "Minimum Candles Between Swing Points", minval=1, group=grp_struct)
 
 grp_break = "Breaks (BOS / Touch)"
 showBreakLines = input.bool(true, "Show Level Line From Each High/Low", group=grp_break)
@@ -35,6 +36,7 @@ var float tempPeakPrice = na
 var int tempPeakTime = 0
 var float lastConfirmedPrice = na
 var int lastConfirmedTime = 0
+var int lastConfirmedBarIndex = 0
 
 var float activeOldHighPrice = na
 var int   activeOldHighTime  = na
@@ -74,7 +76,7 @@ if mode == 1 // Searching for a High
         tempPeakPrice := high
         tempPeakTime := time
 
-    if bearFVG
+    if bearFVG and (bar_index - lastConfirmedBarIndex) >= minBarsBetweenSwings
         // Confirm the High (we came from Low -> High)
         bool isExpansion = not na(activeOldHighPrice) and tempPeakPrice > activeOldHighPrice
 
@@ -102,6 +104,7 @@ if mode == 1 // Searching for a High
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
+        lastConfirmedBarIndex := bar_index
         mode := -1
         tempPeakPrice := low
         tempPeakTime := time
@@ -111,7 +114,7 @@ else if mode == -1 // Searching for a Low
         tempPeakPrice := low
         tempPeakTime := time
 
-    if bullFVG
+    if bullFVG and (bar_index - lastConfirmedBarIndex) >= minBarsBetweenSwings
         // Confirm the Low (we came from High -> Low)
         bool isExpansion = not na(activeOldLowPrice) and tempPeakPrice < activeOldLowPrice
 
@@ -139,6 +142,7 @@ else if mode == -1 // Searching for a Low
 
         lastConfirmedPrice := tempPeakPrice
         lastConfirmedTime := tempPeakTime
+        lastConfirmedBarIndex := bar_index
         mode := 1
         tempPeakPrice := high
         tempPeakTime := time
@@ -150,6 +154,7 @@ else if mode == 0 // Start up
         tempPeakTime := time
         lastConfirmedPrice := low[2]
         lastConfirmedTime := time[2]
+        lastConfirmedBarIndex := bar_index - 2
         activeOldLowPrice := low[2]
         activeOldLowTime  := time[2]
         lowBroken         := false
@@ -159,6 +164,7 @@ else if mode == 0 // Start up
         tempPeakTime := time
         lastConfirmedPrice := high[2]
         lastConfirmedTime := time[2]
+        lastConfirmedBarIndex := bar_index - 2
         activeOldHighPrice := high[2]
         activeOldHighTime  := time[2]
         highBroken         := false
