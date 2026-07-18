@@ -1,0 +1,116 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+enum ProductCategory {
+  ELECTRONICS
+  INDUSTRIAL_EQUIPMENT
+  RAW_MATERIALS
+  VEHICLES_MACHINERY
+  CONSTRUCTION_MATERIALS
+  CONSUMER_GOODS
+  MEDICAL_SUPPLIES
+  AGRICULTURE_FOOD
+  SERVICES
+  OTHER
+}
+
+enum RequestStatus {
+  NEW
+  UNDER_REVIEW
+  QUOTED
+  ACCEPTED
+  DECLINED
+  FULFILLED
+  CANCELLED
+  REJECTED_ILLEGAL
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  company      String?
+  phone        String?
+  country      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  requests       Request[]       @relation("RequestCustomer")
+  quotes         Quote[]         @relation("QuoteAuthor")
+  requestMessages RequestMessage[] @relation("MessageSender")
+
+  @@index([email])
+}
+
+model Request {
+  id                String          @id @default(cuid())
+  title             String
+  category          ProductCategory
+  description       String
+  quantity          String
+  targetBudget      Float?
+  currency          String          @default("USD")
+  deadline          DateTime?
+  destinationCountry String?
+  legalDeclaration  Boolean         @default(false)
+  status            RequestStatus   @default(NEW)
+  rejectionReason   String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  customer   User   @relation("RequestCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+
+  quotes   Quote[]
+  messages RequestMessage[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model Quote {
+  id         String    @id @default(cuid())
+  price      Float
+  currency   String    @default("USD")
+  notes      String?
+  validUntil DateTime?
+  createdAt  DateTime  @default(now())
+
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestId String
+
+  author   User   @relation("QuoteAuthor", fields: [authorId], references: [id])
+  authorId String
+
+  @@index([requestId])
+}
+
+model RequestMessage {
+  id        String   @id @default(cuid())
+  body      String
+  createdAt DateTime @default(now())
+
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestId String
+
+  sender   User   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId String
+
+  @@index([requestId, createdAt])
+}
