@@ -1,0 +1,110 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+enum RequestCategory {
+  ELECTRONICS
+  INDUSTRIAL_EQUIPMENT
+  RAW_MATERIALS
+  TEXTILES
+  FOOD_AND_BEVERAGE
+  MEDICAL_SUPPLIES
+  CONSTRUCTION_MATERIALS
+  LOGISTICS_SERVICES
+  OTHER
+}
+
+enum RequestStatus {
+  PENDING
+  QUOTED
+  ACCEPTED
+  DECLINED_BY_CUSTOMER
+  FULFILLED
+  REJECTED_ILLEGAL
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  createdAt    DateTime @default(now())
+
+  requests SupplyRequest[]
+  messages Message[]
+
+  @@index([email])
+}
+
+model SupplyRequest {
+  id                       String        @id @default(cuid())
+  category                 RequestCategory
+  categoryOther            String?
+  title                    String
+  description              String
+  quantity                 String
+  budget                   Float?
+  neededBy                 DateTime?
+  legalDeclarationAccepted Boolean       @default(false)
+  status                   RequestStatus @default(PENDING)
+  rejectionReason          String?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  customer   User   @relation(fields: [customerId], references: [id])
+  customerId String
+
+  quotes   Quote[]
+  messages Message[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model Quote {
+  id        String      @id @default(cuid())
+  price     Float
+  notes     String?
+  status    QuoteStatus @default(PENDING)
+  createdAt DateTime    @default(now())
+
+  request   SupplyRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestId String
+
+  @@index([requestId])
+}
+
+enum QuoteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  SUPERSEDED
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  request   SupplyRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  requestId String
+
+  sender   User   @relation(fields: [senderId], references: [id])
+  senderId String
+
+  @@index([requestId, createdAt])
+}
