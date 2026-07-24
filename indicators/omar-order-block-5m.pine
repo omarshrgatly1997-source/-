@@ -1,0 +1,207 @@
+//@version=5
+indicator("Omar Order Block - 5m", overlay=true, max_boxes_count=50, max_lines_count=50, max_labels_count=200)
+
+// ============ تحقق من الفريم الزمني ============
+is5m = timeframe.period == "5"
+var label warnLbl = na
+if not is5m
+    if na(warnLbl)
+        warnLbl := label.new(bar_index, high, "⚠️ هاد المؤشر مصمم لفريم 5 دقايق فقط\nحالياً: " + timeframe.period,
+             style=label.style_label_down, color=color.new(color.orange,0), textcolor=color.white, size=size.normal)
+    if barstate.islast
+        label.set_xy(warnLbl, bar_index, high)
+
+// ============ INPUTS ============
+impulseAtrLen   = input.int(14, "فترة ATR لتحديد قوة الاندفاعة")
+impulseMinAtr   = input.float(1.2, "أقل حركة سعرية للاندفاعة (× ATR)", minval=0.5, step=0.1)
+volMaLen        = input.int(20, "متوسط الحجم")
+volMultiplier   = input.float(1.3, "مضاعف تأكيد حجم الاندفاعة", minval=1.0, step=0.1)
+rrMultiplier    = input.float(2.0, "نسبة جني الأرباح للمخاطرة (Risk:Reward)", minval=0.5, step=0.5)
+maxBoxAgeBars   = input.int(100, "أقصى عمر للصندوق قبل ما ينمسح (بالشمعات)")
+requireCloseConfirm = input.bool(true, "تأكيد بإغلاق الشمعة داخل الصندوق قبل الدخول")
+
+// ============ الاندفاعة (Impulsive Move) ============
+atrVal = ta.atr(impulseAtrLen)
+volMa  = ta.sma(volume, volMaLen)
+
+barRange = high - low
+// barstate.isconfirmed منعاً لتغيّر الإشارة أثناء تكوّن الشمعة (repainting)
+isImpulseBar = barstate.isconfirmed and barRange > atrVal * impulseMinAtr and volume > volMa * volMultiplier
+
+bullImpulse = isImpulseBar and close > open   // اندفاعة صاعدة
+bearImpulse = isImpulseBar and close < open   // اندفاعة هابطة
+
+// ============ تحديد الأوردر بلوك ============
+// bullish OB: آخر شمعة هابطة قبل اندفاعة صاعدة
+// bearish OB: آخر شمعة صاعدة قبل اندفاعة هابطة
+
+var box bullBox = na
+var box bearBox = na
+var float bullBoxTop = na
+var float bullBoxBot = na
+var float bearBoxTop = na
+var float bearBoxBot = na
+var int   bullBoxBar = na
+var int   bearBoxBar = na
+
+var bool bullBoxActive = false
+var bool bearBoxActive = false
+
+if bullImpulse and close[1] < open[1]
+    bullBoxTop := open[1]
+    bullBoxBot := low[1]
+    bullBoxBar := bar_index[1]
+    bullBoxActive := true
+    if not na(bullBox)
+        box.delete(bullBox)
+    bullBox := box.new(bar_index[1], bullBoxTop, bar_index + maxBoxAgeBars, bullBoxBot,
+         border_color=color.new(color.green,0), bgcolor=color.new(color.green,85), extend=extend.none)
+
+if bearImpulse and close[1] > open[1]
+    bearBoxTop := high[1]
+    bearBoxBot := open[1]
+    bearBoxBar := bar_index[1]
+    bearBoxActive := true
+    if not na(bearBox)
+        box.delete(bearBox)
+    bearBox := box.new(bar_index[1], bearBoxTop, bar_index + maxBoxAgeBars, bearBoxBot,
+         border_color=color.new(color.red,0), bgcolor=color.new(color.red,85), extend=extend.none)
+
+// إلغاء الصندوق لو انتهى عمره أو انكسر بقوة
+if bullBoxActive and (bar_index - bullBoxBar > maxBoxAgeBars or close < bullBoxBot - atrVal)
+    bullBoxActive := false
+    if not na(bullBox)
+        box.delete(bullBox)
+        bullBox := na
+
+if bearBoxActive and (bar_index - bearBoxBar > maxBoxAgeBars or close > bearBoxTop + atrVal)
+    bearBoxActive := false
+    if not na(bearBox)
+        box.delete(bearBox)
+        bearBox := na
+
+// ============ إدارة الصفقة المفتوحة ============
+var bool  inTrade = false
+var int   tradeDir = 0
+var float entryPrice = na
+var float slPrice = na
+var float tpPrice = na
+var int   entryBar = na
+var line entryLine = na
+var line slLine = na
+var line tpLine = na
+var label tradeLbl = na
+var box  profitZone = na
+var box  lossZone = na
+
+if inTrade
+    line.set_x2(entryLine, bar_index)
+    line.set_x2(slLine, bar_index)
+    line.set_x2(tpLine, bar_index)
+    box.set_right(profitZone, bar_index)
+    box.set_right(lossZone, bar_index)
+
+    // نتحقق من الوقف أولاً (افتراض متحفّظ) لتفادي تحيّز متفائل لو انضربوا الهدف والوقف بنفس الشمعة
+    if tradeDir == 1
+        if low <= slPrice
+            inTrade := false
+            label.new(bar_index, slPrice, "❌ وقف", style=label.style_label_left,
+                 color=color.new(color.red,0), textcolor=color.white, size=size.small)
+        else if high >= tpPrice
+            inTrade := false
+            label.new(bar_index, tpPrice, "✅ هدف", style=label.style_label_left,
+                 color=color.new(color.green,0), textcolor=color.white, size=size.small)
+    else
+        if high >= slPrice
+            inTrade := false
+            label.new(bar_index, slPrice, "❌ وقف", style=label.style_label_left,
+                 color=color.new(color.red,0), textcolor=color.white, size=size.small)
+        else if low <= tpPrice
+            inTrade := false
+            label.new(bar_index, tpPrice, "✅ هدف", style=label.style_label_left,
+                 color=color.new(color.green,0), textcolor=color.white, size=size.small)
+
+// ============ إشارة الدخول عند رجوع السعر للصندوق ============
+touchedBullBox = bullBoxActive and low <= bullBoxTop and low >= bullBoxBot
+touchedBearBox = bearBoxActive and high >= bearBoxBot and high <= bearBoxTop
+
+// barstate.isconfirmed مضافة لأن "تأكيد الإغلاق" ما ينفعش يتحقق على شمعة لسا كتتكوّن
+bullConfirm = requireCloseConfirm ? (touchedBullBox and close > open and barstate.isconfirmed) : touchedBullBox
+bearConfirm = requireCloseConfirm ? (touchedBearBox and close < open and barstate.isconfirmed) : touchedBearBox
+
+if not inTrade and bullConfirm
+    candEntry = close
+    candSL = bullBoxBot - atrVal * 0.2
+    riskPts = candEntry - candSL
+    if riskPts > 0
+        entryPrice := candEntry
+        slPrice := candSL
+        tpPrice := candEntry + riskPts * rrMultiplier
+        tradeDir := 1
+        inTrade := true
+        entryBar := bar_index
+        if not na(entryLine)
+            line.delete(entryLine)
+        if not na(slLine)
+            line.delete(slLine)
+        if not na(tpLine)
+            line.delete(tpLine)
+        if not na(tradeLbl)
+            label.delete(tradeLbl)
+        if not na(profitZone)
+            box.delete(profitZone)
+        if not na(lossZone)
+            box.delete(lossZone)
+        entryLine := line.new(bar_index, entryPrice, bar_index, entryPrice, color=color.blue, width=2)
+        slLine    := line.new(bar_index, slPrice, bar_index, slPrice, color=color.red, width=2, style=line.style_dashed)
+        tpLine    := line.new(bar_index, tpPrice, bar_index, tpPrice, color=color.green, width=2, style=line.style_dashed)
+        profitZone := box.new(bar_index, tpPrice, bar_index, entryPrice, border_color=na, bgcolor=color.new(color.green,88))
+        lossZone   := box.new(bar_index, entryPrice, bar_index, slPrice, border_color=na, bgcolor=color.new(color.red,88))
+        // سهم واضح عند نقطة الدخول بالضبط
+        label.new(bar_index, low - atrVal*0.5, "▲", style=label.style_label_up,
+             color=color.new(color.green,0), textcolor=color.white, size=size.large)
+        tradeLbl  := label.new(bar_index, entryPrice, "شراء (OB)\nدخول: " + str.tostring(math.round(entryPrice,1)) +
+             "\nوقف: " + str.tostring(math.round(slPrice,1)) +
+             "\nهدف: " + str.tostring(math.round(tpPrice,1)),
+             style=label.style_label_up, color=color.new(color.green,0), textcolor=color.white, size=size.small)
+
+if not inTrade and bearConfirm
+    candEntry = close
+    candSL = bearBoxTop + atrVal * 0.2
+    riskPts = candSL - candEntry
+    if riskPts > 0
+        entryPrice := candEntry
+        slPrice := candSL
+        tpPrice := candEntry - riskPts * rrMultiplier
+        tradeDir := -1
+        inTrade := true
+        entryBar := bar_index
+        if not na(entryLine)
+            line.delete(entryLine)
+        if not na(slLine)
+            line.delete(slLine)
+        if not na(tpLine)
+            line.delete(tpLine)
+        if not na(tradeLbl)
+            label.delete(tradeLbl)
+        if not na(profitZone)
+            box.delete(profitZone)
+        if not na(lossZone)
+            box.delete(lossZone)
+        entryLine := line.new(bar_index, entryPrice, bar_index, entryPrice, color=color.blue, width=2)
+        slLine    := line.new(bar_index, slPrice, bar_index, slPrice, color=color.red, width=2, style=line.style_dashed)
+        tpLine    := line.new(bar_index, tpPrice, bar_index, tpPrice, color=color.green, width=2, style=line.style_dashed)
+        profitZone := box.new(bar_index, entryPrice, bar_index, tpPrice, border_color=na, bgcolor=color.new(color.green,88))
+        lossZone   := box.new(bar_index, slPrice, bar_index, entryPrice, border_color=na, bgcolor=color.new(color.red,88))
+        // سهم واضح عند نقطة الدخول بالضبط
+        label.new(bar_index, high + atrVal*0.5, "▼", style=label.style_label_down,
+             color=color.new(color.red,0), textcolor=color.white, size=size.large)
+        tradeLbl  := label.new(bar_index, entryPrice, "بيع (OB)\nدخول: " + str.tostring(math.round(entryPrice,1)) +
+             "\nوقف: " + str.tostring(math.round(slPrice,1)) +
+             "\nهدف: " + str.tostring(math.round(tpPrice,1)),
+             style=label.style_label_down, color=color.new(color.red,0), textcolor=color.white, size=size.small)
+
+// ============ تنبيهات ============
+// إضافة "not inTrade" عشان ما يتكرروش التنبيه وفي صفقة مفتوحة أصلاً بدون دخول فعلي
+alertcondition(bullConfirm and not inTrade, title="دخول شراء - أوردر بلوك", message="لمس أوردر بلوك صاعد + تأكيد إغلاق")
+alertcondition(bearConfirm and not inTrade, title="دخول بيع - أوردر بلوك", message="لمس أوردر بلوك هابط + تأكيد إغلاق")
