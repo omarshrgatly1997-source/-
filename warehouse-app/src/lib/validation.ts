@@ -90,3 +90,19 @@ export const purchaseSchema = z.object({
   unitCost: z.coerce.number().min(0, "التكلفة لا يمكن أن تكون سالبة"),
   notes: optionalText(300),
 });
+
+export const customerSchema = z.object({
+  name: z.string().trim().min(2, "اسم العميل يجب أن يكون حرفين على الأقل").max(150),
+  phone: optionalText(40),
+  email: optionalEmail(),
+  address: optionalText(300),
+});
+
+export const saleSchema = z.object({
+  warehouseId: z.string().min(1),
+  customerId: z.string().min(1, "اختر عميلًا"),
+  productId: z.string().min(1, "اختر صنفًا"),
+  quantity: z.coerce.number().positive("الكمية يجب أن تكون أكبر من صفر"),
+  unitPrice: z.coerce.number().min(0, "السعر لا يمكن أن يكون سالبًا"),
+  notes: optionalText(300),
+});

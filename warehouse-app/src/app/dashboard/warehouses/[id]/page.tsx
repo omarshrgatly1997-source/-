@@ -68,6 +68,12 @@ export default async function WarehouseDetailPage({
             شراء من مورد
           </Link>
           <Link
+            href={`/dashboard/warehouses/${warehouse.id}/sales/new`}
+            className="rounded-lg border border-neutral-700 px-4 py-2 text-sm font-semibold text-neutral-200 transition hover:border-neutral-500"
+          >
+            بيع لعميل
+          </Link>
+          <Link
             href={`/dashboard/warehouses/${warehouse.id}/transfers/new`}
             className="rounded-lg border border-neutral-700 px-4 py-2 text-sm font-semibold text-neutral-200 transition hover:border-neutral-500"
           >

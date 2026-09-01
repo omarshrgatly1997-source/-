@@ -222,3 +222,64 @@ export async function receivePurchase(input: ReceivePurchaseInput) {
     return { purchaseOrder: po, receipt };
   });
 }
+
+export type DeliverSaleInput = {
+  customerId: string;
+  warehouseId: string;
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  userId: string;
+  notes?: string;
+};
+
+/** MVP simplification: one product per sale, delivered immediately (no
+ * DRAFT/CONFIRMED/PARTIALLY_DELIVERED order lifecycle) — see docs/roadmap.md. */
+export async function deliverSale(input: DeliverSaleInput) {
+  return prisma.$transaction(async (tx) => {
+    const { qty } = await getBalanceQty(tx, input.productId, input.warehouseId);
+    if (qty < input.quantity) {
+      throw new InsufficientStockError();
+    }
+
+    const so = await tx.salesOrder.create({
+      data: {
+        customerId: input.customerId,
+        warehouseId: input.warehouseId,
+        status: "DELIVERED",
+        createdById: input.userId,
+        items: {
+          create: [
+            { productId: input.productId, quantity: input.quantity, unitPrice: input.unitPrice },
+          ],
+        },
+      },
+    });
+
+    const delivery = await tx.deliveryNote.create({
+      data: {
+        soId: so.id,
+        warehouseId: input.warehouseId,
+        deliveredById: input.userId,
+        items: { create: [{ productId: input.productId, quantity: input.quantity }] },
+      },
+    });
+
+    await tx.stockMovement.create({
+      data: {
+        type: "ISSUE_OUT",
+        productId: input.productId,
+        warehouseId: input.warehouseId,
+        quantity: -input.quantity,
+        userId: input.userId,
+        notes: input.notes || null,
+        referenceType: "DELIVERY_NOTE",
+        referenceId: delivery.id,
+      },
+    });
+
+    await applyBalanceDelta(tx, input.productId, input.warehouseId, -input.quantity);
+
+    return { salesOrder: so, delivery };
+  });
+}
