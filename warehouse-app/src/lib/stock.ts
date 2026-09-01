@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 
 /**
  * MVP simplification: movements/balances aren't bucketed by location or
@@ -27,6 +28,39 @@ export async function ensureDefaultUnit() {
   });
 }
 
+export class InsufficientStockError extends Error {
+  constructor() {
+    super("لا يوجد رصيد كافٍ لهذا الصنف في هذا المستودع لإتمام العملية");
+    this.name = "InsufficientStockError";
+  }
+}
+
+async function getBalanceQty(tx: Prisma.TransactionClient, productId: string, warehouseId: string) {
+  const balance = await tx.stockBalance.findFirst({
+    where: { productId, warehouseId, locationId: null, batchId: null },
+  });
+  return { balance, qty: balance?.quantity ?? 0 };
+}
+
+/** Applies `delta` (signed) to a product's balance in a warehouse, creating
+ * the balance row if it doesn't exist yet. Caller is responsible for any
+ * "enough stock to go negative" check beforehand. */
+async function applyBalanceDelta(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  warehouseId: string,
+  delta: number
+) {
+  const { balance, qty } = await getBalanceQty(tx, productId, warehouseId);
+  if (balance) {
+    await tx.stockBalance.update({ where: { id: balance.id }, data: { quantity: qty + delta } });
+  } else {
+    await tx.stockBalance.create({
+      data: { productId, warehouseId, quantity: delta },
+    });
+  }
+}
+
 export type ApplyMovementInput = {
   type: "RECEIPT_IN" | "ISSUE_OUT";
   productId: string;
@@ -36,28 +70,12 @@ export type ApplyMovementInput = {
   notes?: string;
 };
 
-export class InsufficientStockError extends Error {
-  constructor() {
-    super("لا يوجد رصيد كافٍ لهذا الصنف في هذا المستودع لإتمام عملية الصرف");
-    this.name = "InsufficientStockError";
-  }
-}
-
 export async function applyStockMovement(input: ApplyMovementInput) {
   const signedQuantity = input.type === "RECEIPT_IN" ? input.quantity : -input.quantity;
 
   return prisma.$transaction(async (tx) => {
-    const balance = await tx.stockBalance.findFirst({
-      where: {
-        productId: input.productId,
-        warehouseId: input.warehouseId,
-        locationId: null,
-        batchId: null,
-      },
-    });
-
-    const currentQty = balance?.quantity ?? 0;
-    if (input.type === "ISSUE_OUT" && currentQty < input.quantity) {
+    const { qty } = await getBalanceQty(tx, input.productId, input.warehouseId);
+    if (input.type === "ISSUE_OUT" && qty < input.quantity) {
       throw new InsufficientStockError();
     }
 
@@ -73,21 +91,134 @@ export async function applyStockMovement(input: ApplyMovementInput) {
       },
     });
 
-    if (balance) {
-      await tx.stockBalance.update({
-        where: { id: balance.id },
-        data: { quantity: currentQty + signedQuantity },
-      });
-    } else {
-      await tx.stockBalance.create({
-        data: {
-          productId: input.productId,
-          warehouseId: input.warehouseId,
-          quantity: signedQuantity,
-        },
-      });
-    }
+    await applyBalanceDelta(tx, input.productId, input.warehouseId, signedQuantity);
 
     return movement;
+  });
+}
+
+export type ApplyTransferInput = {
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  productId: string;
+  quantity: number;
+  userId: string;
+  notes?: string;
+};
+
+/** MVP simplification: transfers complete immediately (no DRAFT/IN_TRANSIT
+ * hand-off step) — see docs/roadmap.md. */
+export async function applyStockTransfer(input: ApplyTransferInput) {
+  if (input.fromWarehouseId === input.toWarehouseId) {
+    throw new Error("لا يمكن التحويل لنفس المستودع");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const { qty } = await getBalanceQty(tx, input.productId, input.fromWarehouseId);
+    if (qty < input.quantity) {
+      throw new InsufficientStockError();
+    }
+
+    const transfer = await tx.stockTransfer.create({
+      data: {
+        fromWarehouseId: input.fromWarehouseId,
+        toWarehouseId: input.toWarehouseId,
+        status: "RECEIVED",
+        requestedById: input.userId,
+        approvedById: input.userId,
+        items: { create: [{ productId: input.productId, quantity: input.quantity }] },
+      },
+    });
+
+    await tx.stockMovement.create({
+      data: {
+        type: "TRANSFER_OUT",
+        productId: input.productId,
+        warehouseId: input.fromWarehouseId,
+        quantity: -input.quantity,
+        userId: input.userId,
+        notes: input.notes || null,
+        referenceType: "STOCK_TRANSFER",
+        referenceId: transfer.id,
+      },
+    });
+    await tx.stockMovement.create({
+      data: {
+        type: "TRANSFER_IN",
+        productId: input.productId,
+        warehouseId: input.toWarehouseId,
+        quantity: input.quantity,
+        userId: input.userId,
+        notes: input.notes || null,
+        referenceType: "STOCK_TRANSFER",
+        referenceId: transfer.id,
+      },
+    });
+
+    await applyBalanceDelta(tx, input.productId, input.fromWarehouseId, -input.quantity);
+    await applyBalanceDelta(tx, input.productId, input.toWarehouseId, input.quantity);
+
+    return transfer;
+  });
+}
+
+export type ReceivePurchaseInput = {
+  supplierId: string;
+  warehouseId: string;
+  productId: string;
+  quantity: number;
+  unitCost: number;
+  userId: string;
+  notes?: string;
+};
+
+/** MVP simplification: one product per purchase, received immediately (no
+ * DRAFT/SENT/PARTIALLY_RECEIVED order lifecycle) — see docs/roadmap.md. */
+export async function receivePurchase(input: ReceivePurchaseInput) {
+  return prisma.$transaction(async (tx) => {
+    const po = await tx.purchaseOrder.create({
+      data: {
+        supplierId: input.supplierId,
+        warehouseId: input.warehouseId,
+        status: "RECEIVED",
+        createdById: input.userId,
+        items: {
+          create: [
+            {
+              productId: input.productId,
+              quantity: input.quantity,
+              unitCost: input.unitCost,
+              receivedQty: input.quantity,
+            },
+          ],
+        },
+      },
+    });
+
+    const receipt = await tx.goodsReceipt.create({
+      data: {
+        poId: po.id,
+        warehouseId: input.warehouseId,
+        receivedById: input.userId,
+        items: { create: [{ productId: input.productId, quantity: input.quantity }] },
+      },
+    });
+
+    await tx.stockMovement.create({
+      data: {
+        type: "RECEIPT_IN",
+        productId: input.productId,
+        warehouseId: input.warehouseId,
+        quantity: input.quantity,
+        userId: input.userId,
+        notes: input.notes || null,
+        referenceType: "GOODS_RECEIPT",
+        referenceId: receipt.id,
+      },
+    });
+
+    await applyBalanceDelta(tx, input.productId, input.warehouseId, input.quantity);
+
+    return { purchaseOrder: po, receipt };
   });
 }

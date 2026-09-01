@@ -38,6 +38,12 @@ export default async function DashboardLayout({
             >
               الأصناف
             </Link>
+            <Link
+              href="/dashboard/suppliers"
+              className="rounded-lg px-3 py-2 font-medium text-neutral-300 transition hover:bg-neutral-900 hover:text-white"
+            >
+              الموردين
+            </Link>
             {globalAdmin && (
               <Link
                 href="/dashboard/admin"

@@ -22,6 +22,9 @@ export async function createWarehouseAction(
 ): Promise<AdminFormState> {
   await requireGlobalAdmin();
 
+  // The compact admin quick-create form has no address/phone inputs at all;
+  // warehouseSchema's optionalText() normalizes the resulting `null` from
+  // formData.get() the same as an omitted or blank field (see lib/validation.ts).
   const parsed = warehouseSchema.safeParse({
     name: formData.get("name"),
     code: formData.get("code"),
