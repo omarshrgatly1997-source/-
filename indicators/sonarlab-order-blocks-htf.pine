@@ -1,0 +1,177 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ClayeWeight (original) — modifications by Omar, reviewed with Claude
+// Original: "Sonarlab - Order Blocks" v1.0.2
+// This version always detects Order Blocks from a FIXED timeframe (default: 5 minutes),
+// regardless of which timeframe you have the chart open on, using request.security().
+
+//@version=5
+indicator(title='Sonarlab - Order Blocks (HTF)', shorttitle='Sonarlab - OB HTF', overlay=true, max_boxes_count=20)
+
+_v = input.string("1.3.0", title="Version", options=["1.3.0"], group="Version")
+
+// -------------------------------
+// Timeframe the Order Blocks are calculated from (independent of chart timeframe)
+// -------------------------------
+htf_input = input.timeframe("5", title="Order Block Timeframe", group="Order Block", tooltip="Order blocks are always computed from this timeframe's candles, no matter what timeframe the chart itself is on.")
+confirm_htf_bar = input.bool(true, title="Confirm on closed candle only (recommended)", group="Order Block", tooltip="ON = only reacts to a fully CLOSED candle on the Order Block Timeframe (no repaint, signal lags by up to one candle of that timeframe). OFF = reacts live to the still-forming candle, which can repaint/change until that candle closes.")
+
+// -------------------------------
+// Sensitivity / momentum detection
+// -------------------------------
+sens_input = input.int(28, minval=1, title='Sensitivity', group='Order Block', tooltip='Lower the sensitivity to show more order blocks. A higher sensitivity will show less order blocks.')
+sens = sens_input / 100.0
+
+norm_mode = input.string("Percent (original)", title="Sensitivity Basis", options=["Percent (original)", "ATR-normalized"], group="Order Block", tooltip="ATR-normalized keeps the same Sensitivity behavior across different symbols/timeframes instead of a raw price percentage.")
+atr_len = input.int(14, minval=1, title="ATR Length (only used if ATR-normalized)", group="Order Block")
+
+// Box lookback window (how far back, in Order-Block-Timeframe candles, we search for the opposite-colored candle)
+lookback_start = input.int(4, minval=1, title="Lookback Start", group="Order Block")
+lookback_end = input.int(15, minval=2, title="Lookback End", group="Order Block")
+
+// Cooldown between OB creations, per direction, measured in Order-Block-Timeframe candles
+cooldown = input.int(5, minval=0, title="Cooldown (candles, per direction)", group="Order Block")
+
+// Liquidity sweep confirmation (ICT / Smart Money Concepts definition of a "valid" Order Block):
+// a bearish OB should only count if the impulsive move also swept a recent prior HIGH (buy-side
+// liquidity / stop hunt above old highs) right before reversing down; a bullish OB should only
+// count if the impulsive move swept a recent prior LOW (sell-side liquidity) before reversing up.
+// Without this, the indicator only checks "was there a fast move", not "did it actually take liquidity".
+use_liquidity_filter = input.bool(true, title="Require Liquidity Sweep before OB", group="Order Block", tooltip="ON = only draws an Order Block if the impulsive move also broke a recent prior swing high (bearish OB) or swing low (bullish OB) — the ICT/SMC definition of a valid OB. OFF = original behavior (any fast move qualifies).")
+sweep_lookback = input.int(20, minval=5, title="Liquidity Sweep Lookback (candles)", group="Order Block", tooltip="How many candles before the impulsive move to look for the prior swing high/low that should get swept.")
+
+// OB mitigation — this uses the CHART's own price action (whatever timeframe you're viewing),
+// so a 5m order block can still be tested/invalidated by fine-grained price action on a lower timeframe chart.
+OBMitigationType = input.string("Close", title="OB Mitigation Type", options=["Close", "Wick"], group="Order Block", tooltip="Choose how Order Blocks are mitigated")
+OBBullMitigation = OBMitigationType == "Close" ? close[1] : low
+OBBearMitigation = OBMitigationType == "Close" ? close[1] : high
+
+// Colors
+col_bullish = input.color(#5db49e, title="Bullish OB Border", inline="a", group="Order Block")
+col_bullish_ob = input.color(color.new(#64C4AC, 85), title="Background", inline="a", group="Order Block")
+col_bearish = input.color(#4760bb, title="Bearish OB Border", inline="b", group="Order Block")
+col_bearish_ob = input.color(color.new(#506CD3, 85), title="Background", inline="b", group="Order Block")
+
+// Alerts
+buy_alert = input.bool(title='Buy Signal', defval=true, group='Alerts', tooltip='An alert will be sent when price trades inside a bullish order block.')
+sell_alert = input.bool(title='Sell Signal', defval=true, group='Alerts', tooltip='An alert will be sent when price trades inside a bearish order block.')
+
+// -------------------------------
+// Order block detection, evaluated entirely inside the Order Block Timeframe's own
+// bar context (so ta.crossover/crossunder, bar_index, var state etc. all operate on
+// THAT timeframe's candles, not the chart's). `offset` shifts everything back by one
+// OB-timeframe candle when "confirm on closed candle only" is enabled.
+// -------------------------------
+f_ob_signals(offset) =>
+    ref_open = open[offset + lookback_start]
+    pc_percent = (open[offset] - ref_open) / ref_open * 100
+    pc_atr = (open[offset] - ref_open) / ta.atr(atr_len)[offset] * 100
+    pc = norm_mode == "ATR-normalized" ? pc_atr : pc_percent
+
+    bear_cross = ta.crossunder(pc, -sens)
+    bull_cross = ta.crossover(pc, sens)
+
+    int last_green = na
+    int last_red = na
+    for i = lookback_start to lookback_end by 1
+        idx = offset + i
+        if na(last_green) and close[idx] > open[idx]
+            last_green := idx
+        if na(last_red) and close[idx] < open[idx]
+            last_red := idx
+        if not na(last_green) and not na(last_red)
+            break
+
+    // Liquidity sweep check: how far the impulsive move actually reached (from the reference
+    // bar up to the confirmation bar) vs. the prior swing extreme right before that window.
+    impulse_span = lookback_start + 1
+    prior_swing_high = ta.highest(high[impulse_span], sweep_lookback)[offset]
+    prior_swing_low = ta.lowest(low[impulse_span], sweep_lookback)[offset]
+    impulse_high = ta.highest(high, impulse_span)[offset]
+    impulse_low = ta.lowest(low, impulse_span)[offset]
+
+    swept_high = impulse_high > prior_swing_high   // buy-side liquidity swept -> needed for a bearish OB
+    swept_low = impulse_low < prior_swing_low       // sell-side liquidity swept -> needed for a bullish OB
+
+    // Per-direction cooldown (tracked in this timeframe's own bar count)
+    var int last_bear_idx = na
+    var int last_bull_idx = na
+
+    bear_ok = bear_cross and not na(last_green) and (not use_liquidity_filter or swept_high) and (na(last_bear_idx) or (bar_index - last_bear_idx > cooldown))
+    bull_ok = bull_cross and not na(last_red) and (not use_liquidity_filter or swept_low) and (na(last_bull_idx) or (bar_index - last_bull_idx > cooldown))
+
+    if bear_ok
+        last_bear_idx := bar_index
+    if bull_ok
+        last_bull_idx := bar_index
+
+    // NOTE: using if/else here on purpose, not the ?: ternary — Pine's ternary operator
+    // always evaluates BOTH branches, and high[last_green] would throw a runtime error
+    // ("na used as index") on bars where last_green is na even though bear_ok is false.
+    // if/else only evaluates the branch actually taken, so this is safe.
+    float bear_top = na
+    float bear_bot = na
+    int bear_time = na
+    if bear_ok
+        bear_top := high[last_green]
+        bear_bot := low[last_green]
+        bear_time := time[last_green]
+
+    float bull_top = na
+    float bull_bot = na
+    int bull_time = na
+    if bull_ok
+        bull_top := high[last_red]
+        bull_bot := low[last_red]
+        bull_time := time[last_red]
+
+    [bear_ok, bull_ok, bear_top, bear_bot, bear_time, bull_top, bull_bot, bull_time]
+
+[bear_created, bull_created, bear_top, bear_bot, bear_time, bull_top, bull_bot, bull_time] = request.security(syminfo.tickerid, htf_input, f_ob_signals(confirm_htf_bar ? 1 : 0), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+// -------------------------------
+// State (chart-side: boxes are drawn on the chart, anchored to real time so they line
+// up correctly no matter what timeframe the chart itself is on)
+// -------------------------------
+var box drawlongBox = na
+var longBoxes = array.new_box()
+var box drawShortBox = na
+var shortBoxes = array.new_box()
+max_tracked_boxes = 20
+
+if bear_created
+    drawShortBox := box.new(left=bear_time, top=bear_top, bottom=bear_bot, right=bear_time, xloc=xloc.bar_time, bgcolor=col_bearish_ob, border_color=col_bearish, extend=extend.right)
+    if array.size(shortBoxes) >= max_tracked_boxes
+        box.delete(array.shift(shortBoxes))
+    array.push(shortBoxes, drawShortBox)
+
+if bull_created
+    drawlongBox := box.new(left=bull_time, top=bull_top, bottom=bull_bot, right=bull_time, xloc=xloc.bar_time, bgcolor=col_bullish_ob, border_color=col_bullish, extend=extend.right)
+    if array.size(longBoxes) >= max_tracked_boxes
+        box.delete(array.shift(longBoxes))
+    array.push(longBoxes, drawlongBox)
+
+// ----------------- Bearish Order Block: mitigation + alerts -------------------
+if array.size(shortBoxes) > 0
+    for i = array.size(shortBoxes) - 1 to 0 by 1
+        sbox = array.get(shortBoxes, i)
+        top = box.get_top(sbox)
+        bot = box.get_bottom(sbox)
+        if OBBearMitigation > top
+            array.remove(shortBoxes, i)
+            box.delete(sbox)
+        else
+            if sell_alert and high >= bot and low <= top
+                alert('Price inside Bearish OB', alert.freq_once_per_bar)
+
+// ----------------- Bullish Order Block: mitigation + alerts -------------------
+if array.size(longBoxes) > 0
+    for i = array.size(longBoxes) - 1 to 0 by 1
+        sbox = array.get(longBoxes, i)
+        bot = box.get_bottom(sbox)
+        top = box.get_top(sbox)
+        if OBBullMitigation < bot
+            array.remove(longBoxes, i)
+            box.delete(sbox)
+        else
+            if buy_alert and low <= top and high >= bot
+                alert('Price inside Bullish OB', alert.freq_once_per_bar)
